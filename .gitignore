@@ -18,5 +18,9 @@ coverage/
 .vercel/
 mise.local.toml
 
+# editors
+.idea/
+.vscode/
+
 # os
 .DS_Store

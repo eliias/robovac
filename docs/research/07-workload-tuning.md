@@ -78,11 +78,11 @@ The workload: normal application tables with inserts, updates, and deletes. Here
 
 A simple size-based policy works well in practice, close to what pgAssistant and the Azure Postgres guide recommend:
 
-| Table size | Recipe |
-|---|---|
-| < 1 GB or < 1 M rows | keep the defaults |
-| 1 to 50 M rows | `autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_analyze_scale_factor = 0.01` |
-| > 50 M rows | scale factors 0, fixed thresholds sized to the daily change rate (for example vacuum at 500000, analyze at 100000) |
+| Table size           | Recipe                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| < 1 GB or < 1 M rows | keep the defaults                                                                                                  |
+| 1 to 50 M rows       | `autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_analyze_scale_factor = 0.01`                                  |
+| > 50 M rows          | scale factors 0, fixed thresholds sized to the daily change rate (for example vacuum at 500000, analyze at 100000) |
 
 Let ANALYZE run more often than VACUUM. Fresh statistics are cheap and protect the planner, while each vacuum pass costs real I/O. Keith Fiske's cluster-wide baseline reflects this: analyze at 5% + 500 rows, vacuum at 10% + 500 rows.
 
@@ -140,15 +140,15 @@ Run it after the first data load, after each large partition change, and otherwi
 
 ## Summary: workload to settings
 
-| Workload | Key reloptions | Reason |
-|---|---|---|
-| Append-only, large | `autovacuum_vacuum_insert_scale_factor = 0`, `autovacuum_vacuum_insert_threshold` sized to insert rate, `vacuum_freeze_min_age = 0` | Freeze once, early, in small batches. Keep the visibility map set. |
-| Update-heavy, hot | `autovacuum_vacuum_scale_factor = 0`, `autovacuum_vacuum_threshold = 1000`, `autovacuum_vacuum_cost_delay = 0`, `fillfactor = 90` (50 to 90 when extreme), no indexes on updated columns | Vacuum by count, not percent. HOT updates avoid index writes. |
-| Queue table | Update-heavy settings, plus short transactions everywhere, plus partition drop or `TRUNCATE` for cleanup | Reloptions cannot beat a pinned xmin horizon. |
-| Mixed OLTP, > 1 M rows | `autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_analyze_scale_factor = 0.01`, fixed thresholds above 50 M rows | The 20% default scales badly with row count. |
-| Behind long xact / slot | None. Fix timeouts (`idle_in_transaction_session_timeout`, `transaction_timeout` on 17+) and drop stale slots | Vacuum cannot remove tuples the horizon still protects. |
-| Wide columns (TOAST) | Repeat vacuum settings with the `toast.` prefix | The TOAST table has separate settings and defaults. |
-| Partitioned | Reloptions per partition (pg_partman template), scheduled `ANALYZE` on the parent | Parent options do not propagate. Autovacuum never analyzes the parent. |
+| Workload                | Key reloptions                                                                                                                                                                           | Reason                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Append-only, large      | `autovacuum_vacuum_insert_scale_factor = 0`, `autovacuum_vacuum_insert_threshold` sized to insert rate, `vacuum_freeze_min_age = 0`                                                      | Freeze once, early, in small batches. Keep the visibility map set.     |
+| Update-heavy, hot       | `autovacuum_vacuum_scale_factor = 0`, `autovacuum_vacuum_threshold = 1000`, `autovacuum_vacuum_cost_delay = 0`, `fillfactor = 90` (50 to 90 when extreme), no indexes on updated columns | Vacuum by count, not percent. HOT updates avoid index writes.          |
+| Queue table             | Update-heavy settings, plus short transactions everywhere, plus partition drop or `TRUNCATE` for cleanup                                                                                 | Reloptions cannot beat a pinned xmin horizon.                          |
+| Mixed OLTP, > 1 M rows  | `autovacuum_vacuum_scale_factor = 0.02`, `autovacuum_analyze_scale_factor = 0.01`, fixed thresholds above 50 M rows                                                                      | The 20% default scales badly with row count.                           |
+| Behind long xact / slot | None. Fix timeouts (`idle_in_transaction_session_timeout`, `transaction_timeout` on 17+) and drop stale slots                                                                            | Vacuum cannot remove tuples the horizon still protects.                |
+| Wide columns (TOAST)    | Repeat vacuum settings with the `toast.` prefix                                                                                                                                          | The TOAST table has separate settings and defaults.                    |
+| Partitioned             | Reloptions per partition (pg_partman template), scheduled `ANALYZE` on the parent                                                                                                        | Parent options do not propagate. Autovacuum never analyzes the parent. |
 
 Treat every number above as a starting point. Measure the dead-tuple curve and the vacuum frequency per table (chapter 8), change one setting, and measure again.
 

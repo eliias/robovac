@@ -90,11 +90,11 @@ The table must accumulate 200 million dead rows before autovacuum even starts. A
 
 Compare the same math at three sizes:
 
-| reltuples     | Trigger (defaults)  | Trigger at scale_factor 0.005 |
-|---------------|---------------------|-------------------------------|
-| 10,000        | 2,050               | 100                           |
-| 10,000,000    | 2,000,050           | 50,050                        |
-| 1,000,000,000 | 200,000,050         | 5,000,050                     |
+| reltuples     | Trigger (defaults) | Trigger at scale_factor 0.005 |
+| ------------- | ------------------ | ----------------------------- |
+| 10,000        | 2,050              | 100                           |
+| 10,000,000    | 2,000,050          | 50,050                        |
+| 1,000,000,000 | 200,000,050        | 5,000,050                     |
 
 The percentage trigger is fine for small tables and wrong for big ones. Postgres 18's 100 million cap halves the worst case here, but 100 million dead rows is still far too late. The common fixes:
 
@@ -183,7 +183,7 @@ The exception is the anti-wraparound vacuum. When a vacuum runs `to prevent wrap
 ## Scheduling defaults, one table
 
 | GUC                                     | Default     | Since | Notes                                    |
-|-----------------------------------------|-------------|-------|------------------------------------------|
+| --------------------------------------- | ----------- | ----- | ---------------------------------------- |
 | `autovacuum`                            | on          | 8.3   | Wraparound vacuums run even when off     |
 | `autovacuum_naptime`                    | 60s         | 8.1   | Per-database visit interval              |
 | `autovacuum_max_workers`                | 3           | 8.3   | Reloadable since 18, restart before that |

@@ -19,15 +19,15 @@ A table is a set of 8 kB pages (the compile-time default is 8192 bytes). Each pa
 
 Each tuple starts with a fixed 23-byte header, followed by an optional null bitmap and the column data. The header fields that matter for this book:
 
-| Field | Size | Meaning |
-|---|---|---|
-| `t_xmin` | 4 bytes | ID of the transaction that inserted this version |
-| `t_xmax` | 4 bytes | ID of the transaction that deleted or locked it, 0 if none |
-| `t_cid` | 4 bytes | Command number inside the inserting transaction |
-| `t_ctid` | 6 bytes | Physical address (page, line pointer) of this or a newer version |
-| `t_infomask2` | 2 bytes | Column count plus flag bits (HOT flags live here) |
-| `t_infomask` | 2 bytes | 16 flag bits: null bitmap present, xmin committed, xmax is a lock, and more |
-| `t_hoff` | 1 byte | Offset where the column data starts |
+| Field         | Size    | Meaning                                                                     |
+| ------------- | ------- | --------------------------------------------------------------------------- |
+| `t_xmin`      | 4 bytes | ID of the transaction that inserted this version                            |
+| `t_xmax`      | 4 bytes | ID of the transaction that deleted or locked it, 0 if none                  |
+| `t_cid`       | 4 bytes | Command number inside the inserting transaction                             |
+| `t_ctid`      | 6 bytes | Physical address (page, line pointer) of this or a newer version            |
+| `t_infomask2` | 2 bytes | Column count plus flag bits (HOT flags live here)                           |
+| `t_infomask`  | 2 bytes | 16 flag bits: null bitmap present, xmin committed, xmax is a lock, and more |
+| `t_hoff`      | 1 byte  | Offset where the column data starts                                         |
 
 Two fields carry the MVCC story. `t_xmin` says who created the version. `t_xmax` says who expired it. A transaction ID (XID) is a 32-bit counter. Chapter 5 covers what happens when that counter wraps around.
 

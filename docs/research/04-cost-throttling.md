@@ -14,11 +14,11 @@ The throttle applies to `VACUUM` and to `ANALYZE`. Autovacuum enables it by defa
 
 Vacuum charges a fixed price per page, based on what it had to do with that page:
 
-| Parameter | Default (PG 14+) | Charged when vacuum... |
-|---|---|---|
-| `vacuum_cost_page_hit` | 1 | reads a page that is already in shared buffers |
-| `vacuum_cost_page_miss` | 2 | reads a page from disk (or the OS cache) |
-| `vacuum_cost_page_dirty` | 20 | modifies a page that was clean before |
+| Parameter                | Default (PG 14+) | Charged when vacuum...                         |
+| ------------------------ | ---------------- | ---------------------------------------------- |
+| `vacuum_cost_page_hit`   | 1                | reads a page that is already in shared buffers |
+| `vacuum_cost_page_miss`  | 2                | reads a page from disk (or the OS cache)       |
+| `vacuum_cost_page_dirty` | 20               | modifies a page that was clean before          |
 
 The prices are relative weights, not real I/O measurements. The model says: a disk read costs 2x a cache hit, and dirtying a page costs 10x a disk read. Dirtying is the most expensive action because the page must later be written to disk, and the change also produces WAL.
 
@@ -39,11 +39,11 @@ So the delay is proportional: one full budget of work buys one `vacuum_cost_dela
 
 Two delay settings exist:
 
-| Parameter | Default | Applies to |
-|---|---|---|
-| `vacuum_cost_delay` | 0 (throttling off) | manual `VACUUM` and `ANALYZE` |
-| `autovacuum_vacuum_cost_delay` | 2 ms | autovacuum workers |
-| `autovacuum_vacuum_cost_limit` | -1 (inherit `vacuum_cost_limit` = 200) | autovacuum workers |
+| Parameter                      | Default                                | Applies to                    |
+| ------------------------------ | -------------------------------------- | ----------------------------- |
+| `vacuum_cost_delay`            | 0 (throttling off)                     | manual `VACUUM` and `ANALYZE` |
+| `autovacuum_vacuum_cost_delay` | 2 ms                                   | autovacuum workers            |
+| `autovacuum_vacuum_cost_limit` | -1 (inherit `vacuum_cost_limit` = 200) | autovacuum workers            |
 
 Version note: `autovacuum_vacuum_cost_delay` was 20 ms before PostgreSQL 12. Version 12 lowered it to 2 ms and made the setting a float, so values below 1 ms are possible. This one change made autovacuum 10x faster by default.
 
@@ -69,11 +69,11 @@ MB_per_second     = pages_per_second * 8 KB / 1024
 
 With the defaults (limit 200, delay 2 ms): 200 / 0.002 = 100,000 points per second. That converts to these ceilings, one action type at a time:
 
-| Action | Cost per page | Pages/s | Throughput |
-|---|---|---|---|
-| Read from shared buffers | 1 | 100,000 | ~800 MB/s |
-| Read from disk | 2 | 50,000 | ~400 MB/s |
-| Dirty a page | 20 | 5,000 | ~40 MB/s |
+| Action                   | Cost per page | Pages/s | Throughput |
+| ------------------------ | ------------- | ------- | ---------- |
+| Read from shared buffers | 1             | 100,000 | ~800 MB/s  |
+| Read from disk           | 2             | 50,000  | ~400 MB/s  |
+| Dirty a page             | 20            | 5,000   | ~40 MB/s   |
 
 These are ceilings, not measurements. The sleep math ignores the time the work itself takes, so real throughput is lower. Real vacuums also mix all three actions, and the dirty price dominates the mix.
 

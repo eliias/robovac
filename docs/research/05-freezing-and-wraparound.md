@@ -30,12 +30,12 @@ SELECT relfrozenxid, age(relfrozenxid) FROM pg_class WHERE relname = 't';
 
 Four parameters control XID freezing. All defaults below are current in Postgres 18.
 
-| Parameter | Default | Meaning |
-|---|---|---|
-| `vacuum_freeze_min_age` | 50 million | A vacuum freezes row XIDs older than this age |
-| `vacuum_freeze_table_age` | 150 million | A vacuum on a table with `relfrozenxid` older than this becomes aggressive |
-| `autovacuum_freeze_max_age` | 200 million | Postgres forces an anti-wraparound autovacuum at this table age |
-| `vacuum_failsafe_age` | 1.6 billion | A running vacuum enters failsafe mode at this table age (PG14+) |
+| Parameter                   | Default     | Meaning                                                                    |
+| --------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `vacuum_freeze_min_age`     | 50 million  | A vacuum freezes row XIDs older than this age                              |
+| `vacuum_freeze_table_age`   | 150 million | A vacuum on a table with `relfrozenxid` older than this becomes aggressive |
+| `autovacuum_freeze_max_age` | 200 million | Postgres forces an anti-wraparound autovacuum at this table age            |
+| `vacuum_failsafe_age`       | 1.6 billion | A running vacuum enters failsafe mode at this table age (PG14+)            |
 
 The knobs cap each other, so one bad setting cannot disable the ladder:
 
@@ -49,14 +49,14 @@ The interplay: `vacuum_freeze_min_age` decides which rows a vacuum freezes. `vac
 
 Take a table on default settings. Its `age(relfrozenxid)` climbs by one for every write transaction in the cluster, not only writes to this table. Assume the cluster burns 20 million XIDs per day, a realistic rate for a busy OLTP system. The table then climbs one rung of this ladder every few days:
 
-| `age(relfrozenxid)` | Day | What happens |
-|---|---|---|
-| 50 million | 2.5 | Vacuums that visit a page freeze rows older than 50 million |
-| 150 million | 7.5 | The next vacuum runs as an aggressive vacuum |
-| 200 million | 10 | Postgres forces an anti-wraparound autovacuum |
-| 1.6 billion | 80 | A running vacuum triggers the failsafe |
-| ~2.107 billion | ~105 | 40 million XIDs left: warnings in the log |
-| ~2.144 billion | ~107 | 3 million XIDs left: Postgres refuses new XIDs |
+| `age(relfrozenxid)` | Day  | What happens                                                |
+| ------------------- | ---- | ----------------------------------------------------------- |
+| 50 million          | 2.5  | Vacuums that visit a page freeze rows older than 50 million |
+| 150 million         | 7.5  | The next vacuum runs as an aggressive vacuum                |
+| 200 million         | 10   | Postgres forces an anti-wraparound autovacuum               |
+| 1.6 billion         | 80   | A running vacuum triggers the failsafe                      |
+| ~2.107 billion      | ~105 | 40 million XIDs left: warnings in the log                   |
+| ~2.144 billion      | ~107 | 3 million XIDs left: Postgres refuses new XIDs              |
 
 On a healthy system the ladder ends at day 10. The forced autovacuum resets `relfrozenxid` and the climb starts again. The higher rungs exist only for the case where vacuum cannot finish: a stuck lock, a forgotten `autovacuum = off`, a long-open transaction, or a stale replication slot that holds back the freeze horizon.
 
@@ -119,12 +119,12 @@ When more than one transaction locks the same row, for example through `SELECT .
 
 The knobs mirror the XID knobs:
 
-| Parameter | Default |
-|---|---|
-| `vacuum_multixact_freeze_min_age` | 5 million |
-| `vacuum_multixact_freeze_table_age` | 150 million |
-| `autovacuum_multixact_freeze_max_age` | 400 million |
-| `vacuum_multixact_failsafe_age` | 1.6 billion (PG14+) |
+| Parameter                             | Default             |
+| ------------------------------------- | ------------------- |
+| `vacuum_multixact_freeze_min_age`     | 5 million           |
+| `vacuum_multixact_freeze_table_age`   | 150 million         |
+| `autovacuum_multixact_freeze_max_age` | 400 million         |
+| `vacuum_multixact_failsafe_age`       | 1.6 billion (PG14+) |
 
 The watermarks are `pg_class.relminmxid` and `pg_database.datminmxid`, measured with `mxid_age()`. The same ladder applies: aggressive vacuums, forced autovacuums even with autovacuum off, a failsafe, warnings at 40 million remaining, and a stop at 3 million remaining. The multixact stop only blocks commands that would create a multixact, so most plain writes continue.
 
