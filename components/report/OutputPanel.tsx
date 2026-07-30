@@ -1,6 +1,7 @@
 "use client";
 
 import { C, MONO, panel, panelHeader } from "@/components/ui";
+import { useViewport } from "@/components/useViewport";
 import { fmtVal } from "@/lib/core/format";
 import { SETTINGS, type Values } from "@/lib/core/settings";
 import type { Snapshot } from "@/lib/core/snapshot";
@@ -32,6 +33,7 @@ export function OutputPanel({
   copied: boolean;
   onCopy: (sql: string) => void;
 }) {
+  const { mobile } = useViewport();
   const changedCount = SETTINGS.filter((d) => values[d.key] !== snap.current[d.key]).length;
   const sql = buildSql(snap, values);
   return (
@@ -64,7 +66,10 @@ export function OutputPanel({
           fontSize: 11.5,
           lineHeight: 1.7,
           color: C.code,
-          whiteSpace: "pre-wrap",
+          // The one intentional horizontal scroller: wrapping ALTER TABLE to a
+          // phone width makes it unreadable and unpasteable.
+          whiteSpace: mobile ? "pre" : "pre-wrap",
+          overflowX: mobile ? "auto" : undefined,
           wordBreak: "break-word",
         }}
       >

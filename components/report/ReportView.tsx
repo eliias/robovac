@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActionBar } from "@/components/report/ActionBar";
 import { TermLink } from "@/components/TermLink";
+import { useViewport } from "@/components/useViewport";
 import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
 import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
 import { fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
@@ -11,7 +13,7 @@ import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/s
 import { DEMO_SNAPSHOT, type Snapshot } from "@/lib/core/snapshot";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
-import { OutputPanel } from "./OutputPanel";
+import { buildSql, OutputPanel } from "./OutputPanel";
 import { Slider } from "./Slider";
 
 const GROUPS: { id: Group; title: string; jobLine: string }[] = [
@@ -53,10 +55,13 @@ export function ReportView() {
     freeze: true,
   });
   const [copied, setCopied] = useState(false);
-  const [narrow, setNarrow] = useState(false);
+  const { narrow, mobile } = useViewport();
   const userChanged = useRef(false);
 
   useEffect(() => {
+    // Set once from the initial viewport: on a phone only TRIGGER starts open.
+    // Never re-collapse on rotate.
+    if (window.innerWidth < 720) setOpen({ trigger: true, cost: false, freeze: false });
     const fragment = window.location.hash;
     if (!fragment || fragment === "#") {
       const p = { snap: DEMO_SNAPSHOT };
@@ -75,13 +80,6 @@ export function ReportView() {
     } catch (e) {
       setIssues(e instanceof CodecError ? e.issues : [String(e)]);
     }
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < 1120);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   useEffect(() => {
@@ -123,6 +121,7 @@ export function ReportView() {
 
   const { snap, thrCur, periodCur, periodLive, costCur, costLive, aggressiveNow } = derived;
   const gridCols = narrow ? "minmax(0,1fr)" : "minmax(0,1fr) 520px";
+  const bandGap = mobile ? 24 : 48;
   const pending = SETTINGS.filter((d) => values[d.key] !== snap.proposed[d.key]).length;
 
   const note = (key: string): string => {
@@ -191,12 +190,14 @@ export function ReportView() {
   ];
 
   return (
-    <div style={{ maxWidth: 1380, margin: "0 auto", padding: "0 24px 96px" }}>
+    <div
+      style={{ maxWidth: 1380, margin: "0 auto", padding: mobile ? "0 16px 128px" : "0 24px 96px" }}
+    >
       {/* Band A: header */}
       <div
         style={{
           display: "grid",
-          gap: 48,
+          gap: bandGap,
           padding: "36px 0 28px",
           borderBottom: `1px solid ${C.border08}`,
           gridTemplateColumns: gridCols,
@@ -225,7 +226,8 @@ export function ReportView() {
           <h1
             style={{
               fontFamily: MONO,
-              fontSize: 30,
+              fontSize: mobile ? 23 : 30,
+              wordBreak: "break-word",
               fontWeight: 500,
               letterSpacing: "-0.01em",
               color: "#fff",
@@ -339,7 +341,7 @@ export function ReportView() {
       <div
         style={{
           display: "grid",
-          gap: 48,
+          gap: bandGap,
           padding: "22px 0 26px",
           borderBottom: `1px solid ${C.border08}`,
           gridTemplateColumns: gridCols,
@@ -431,7 +433,7 @@ export function ReportView() {
       <div
         style={{
           display: "grid",
-          gap: 48,
+          gap: bandGap,
           alignItems: "start",
           paddingTop: 26,
           gridTemplateColumns: gridCols,
@@ -544,6 +546,9 @@ export function ReportView() {
           </div>
         </div>
 
+        {/* order: -1 on mobile, not a DOM reorder: the first screen answers the
+            question before it offers thirteen knobs, while source order stays
+            the reading order for assistive tech. */}
         <div
           style={{
             top: 70,
@@ -551,6 +556,7 @@ export function ReportView() {
             flexDirection: "column",
             gap: 16,
             position: narrow ? "static" : "sticky",
+            order: mobile ? -1 : undefined,
           }}
         >
           <FigDeadTuples snap={snap} values={values} />
@@ -606,6 +612,23 @@ export function ReportView() {
           </div>
         ))}
       </div>
+
+      {mobile && (
+        <ActionBar
+          pending={pending}
+          periodDays={periodLive}
+          copied={copied}
+          onOptimize={() => setAll({ ...snap.proposed })}
+          onCopy={() => {
+            try {
+              navigator.clipboard.writeText(buildSql(snap, values));
+            } catch {
+              /* clipboard unavailable */
+            }
+            setCopied(true);
+          }}
+        />
+      )}
     </div>
   );
 }

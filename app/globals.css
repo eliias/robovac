@@ -3,6 +3,10 @@ body {
   margin: 0;
   padding: 0;
   background: #08080a;
+  /* Backstop only: if a future long string relies on this, something inside
+     is still too wide (see docs handoff, mobile mode). */
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 * {
@@ -65,4 +69,63 @@ button {
 
 .arcana-link:hover > span {
   background: rgba(255, 255, 255, 0.025);
+}
+
+/* Mobile mode: one breakpoint at 720px. The values are the contract from the
+   mobile handoff; server-rendered pages get them via these classes, client
+   components use the useViewport hook. */
+.site-header {
+  padding: 0 24px;
+}
+
+.page-pad {
+  padding: 36px 24px 96px;
+}
+
+.page-h1 {
+  font-size: 28px;
+}
+
+.arcana-row {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 210px;
+}
+
+.arcana-tag {
+  text-align: right;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 719px) {
+  .m-hide {
+    display: none !important;
+  }
+
+  .site-header {
+    padding: 0 16px;
+  }
+
+  .page-pad {
+    padding: 36px 16px 128px;
+  }
+
+  .page-h1 {
+    font-size: 22px;
+  }
+
+  .arcana-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arcana-tag {
+    text-align: left;
+  }
+
+  .cards-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

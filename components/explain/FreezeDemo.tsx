@@ -2,6 +2,7 @@
 
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { C, MONO, panel, panelHeader } from "@/components/ui";
+import { useViewport } from "@/components/useViewport";
 import { fmtCompact, fmtDur, fmtInt } from "@/lib/core/format";
 import { WRAP } from "@/lib/core/model";
 
@@ -72,6 +73,7 @@ function SimpleSlider({ pct, onPos }: { pct: number; onPos: (p: number) => void 
 }
 
 export function FreezeDemo() {
+  const { mobile } = useViewport();
   const [maxAge, setMaxAge] = useState(200000000);
   const [rate, setRate] = useState(40000000);
 
@@ -154,7 +156,14 @@ export function FreezeDemo() {
           <span>365</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 18 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: mobile ? "1fr" : "1fr 1fr",
+            gap: 24,
+            marginTop: 18,
+          }}
+        >
           <div>
             <div
               style={{

@@ -4,6 +4,7 @@ import { C, MONO } from "@/components/ui";
 export function Header() {
   return (
     <div
+      className="site-header"
       style={{
         position: "sticky",
         top: 0,
@@ -13,7 +14,6 @@ export function Header() {
         justifyContent: "space-between",
         gap: 24,
         height: 46,
-        padding: "0 24px",
         borderBottom: `1px solid ${C.border08}`,
         background: "rgba(8,8,10,0.86)",
         backdropFilter: "blur(8px)",
@@ -33,6 +33,7 @@ export function Header() {
           robovac
         </Link>
         <span
+          className="m-hide"
           style={{
             fontFamily: MONO,
             fontSize: 10.5,
