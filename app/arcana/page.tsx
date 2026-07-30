@@ -42,9 +42,13 @@ export default function ArcanaPage() {
         you can watch it happen.
       </p>
       <div style={{ borderTop: `1px solid ${C.borderStrong}`, marginTop: 22 }}>
-        {TERMS.map((e) => {
-          const draft = e.tag === "draft";
-          const row = (
+        {TERMS.map((e) => (
+          <Link
+            key={e.slug}
+            href={termHref(e.slug)}
+            style={{ display: "block" }}
+            className="arcana-link"
+          >
             <span
               className="arcana-row"
               style={{
@@ -52,12 +56,10 @@ export default function ArcanaPage() {
                 alignItems: "baseline",
                 padding: "12px 0",
                 borderBottom: `1px solid ${C.hair}`,
-                cursor: draft ? "default" : "pointer",
+                cursor: "pointer",
               }}
             >
-              <span style={{ fontFamily: MONO, fontSize: 13, color: draft ? C.faint : C.strong }}>
-                {e.term}
-              </span>
+              <span style={{ fontFamily: MONO, fontSize: 13, color: C.strong }}>{e.term}</span>
               <span style={{ fontFamily: SANS, fontSize: 13.5, lineHeight: 1.5, color: C.dim }}>
                 {e.blurb}
               </span>
@@ -68,20 +70,8 @@ export default function ArcanaPage() {
                 {e.kind} · {e.tag}
               </span>
             </span>
-          );
-          return draft ? (
-            <div key={e.slug}>{row}</div>
-          ) : (
-            <Link
-              key={e.slug}
-              href={termHref(e.slug)}
-              style={{ display: "block" }}
-              className="arcana-link"
-            >
-              {row}
-            </Link>
-          );
-        })}
+          </Link>
+        ))}
       </div>
       <div
         style={{
@@ -93,9 +83,9 @@ export default function ArcanaPage() {
           maxWidth: 760,
         }}
       >
-        Entries marked <span style={{ color: C.dim }}>draft</span> have no page yet; the term still
-        resolves in the report. Definitions follow PostgreSQL 16 behaviour. Where 16 differs from
-        12, the older behaviour is noted on the page, not here.
+        Definitions follow PostgreSQL 16 behaviour and note where newer or older versions differ.
+        Every term in the report links here, and every entry links to a page — the tagged ones with
+        a demo you can drag.
       </div>
     </div>
   );

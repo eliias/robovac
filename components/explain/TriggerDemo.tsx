@@ -1,45 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { C, MONO, panel, panelHeader } from "@/components/ui";
 import { logPos, SimpleSlider } from "@/components/explain/SimpleSlider";
-import { useViewport } from "@/components/useViewport";
+import { C, MONO, panel, panelHeader } from "@/components/ui";
 import { fmtCompact, fmtDur, fmtInt } from "@/lib/core/format";
-import { WRAP } from "@/lib/core/model";
+import { sawPath } from "@/lib/core/model";
 
-export function FreezeDemo() {
-  const { mobile } = useViewport();
-  const [maxAge, setMaxAge] = useState(200000000);
-  const [rate, setRate] = useState(40000000);
+// Toy table: 50M live rows, 2M dead rows per day.
+const LIVE = 50_000_000;
+const DEAD_PER_DAY = 2_000_000;
 
-  const DAYS = 365;
+export function TriggerDemo() {
+  const [scale, setScale] = useState(0.2);
+  const [thresholdRows, setThresholdRows] = useState(50);
+
+  const trigger = thresholdRows + scale * LIVE;
+  const periodDays = trigger / DEAD_PER_DAY;
   const W = 700;
   const H = 190;
-  const period = maxAge / rate;
-
-  let path = `M 0 ${H}`;
-  let t = 0;
-  let i = 0;
-  while (t < DAYS && i < 500) {
-    const t2 = Math.min(t + period, DAYS);
-    const y = H - Math.min(1, (rate * (t2 - t)) / WRAP) * H;
-    path += ` L ${((t2 / DAYS) * W).toFixed(1)} ${y.toFixed(1)}`;
-    if (t2 < DAYS) path += ` L ${((t2 / DAYS) * W).toFixed(1)} ${H}`;
-    t = t2;
-    i++;
-  }
-
-  const maxY = H - (maxAge / WRAP) * H;
-  const marginDays = (WRAP - maxAge) / rate;
 
   return (
     <div style={{ ...panel, marginTop: 28 }}>
       <div style={panelHeader}>
         <span style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}>
-          DEMO — xid age over 365 d, toy table
+          DEMO — dead tuples over 60 d, toy table
         </span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>
-          same chart system as the report
+          50M rows · 2M dead/day
         </span>
       </div>
       <div style={{ padding: "14px 12px" }}>
@@ -54,24 +41,20 @@ export function FreezeDemo() {
           <line
             x1={0}
             x2={W}
-            y1={maxY}
-            y2={maxY}
+            y1={H - (trigger / Math.max(trigger, 1)) * H}
+            y2={H - (trigger / Math.max(trigger, 1)) * H}
             stroke={C.warn}
             strokeWidth={1}
             strokeDasharray="3 3"
           />
-          <path d={path} fill="none" stroke="#ffffff" strokeWidth={1.25} />
-          <text x={4} y={12} fontFamily="IBM Plex Mono, monospace" fontSize={9.5} fill={C.dim}>
-            2,147,483,647 (wraparound)
-          </text>
-          <text
-            x={4}
-            y={Math.max(22, maxY - 5)}
-            fontFamily="IBM Plex Mono, monospace"
-            fontSize={9.5}
-            fill={C.warn}
-          >
-            freeze_max_age = {fmtInt(maxAge)}
+          <path
+            d={sawPath(trigger, DEAD_PER_DAY, 60, W, H, trigger)}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={1.25}
+          />
+          <text x={4} y={12} fontFamily="IBM Plex Mono, monospace" fontSize={9.5} fill={C.warn}>
+            trigger = {fmtCompact(trigger)} dead tuples
           </text>
         </svg>
         <div
@@ -85,20 +68,13 @@ export function FreezeDemo() {
           }}
         >
           <span>day 0</span>
-          <span>90</span>
-          <span>180</span>
-          <span>270</span>
-          <span>365</span>
+          <span>15</span>
+          <span>30</span>
+          <span>45</span>
+          <span>60</span>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: mobile ? "1fr" : "1fr 1fr",
-            gap: 24,
-            marginTop: 18,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18, marginTop: 18 }}>
           <div>
             <div
               style={{
@@ -109,20 +85,23 @@ export function FreezeDemo() {
                 color: C.strong,
               }}
             >
-              <span>autovacuum_freeze_max_age</span>
-              <span style={{ color: "#fff" }}>{fmtInt(maxAge)}</span>
+              <span>autovacuum_vacuum_scale_factor</span>
+              <span style={{ color: "#fff" }}>{scale.toPrecision(2)}</span>
             </div>
             <SimpleSlider
-              pct={logPos(maxAge, 1e8, 2e9) * 100}
-              onPos={(p) => {
-                const v =
-                  Math.round(Math.exp(Math.log(1e8) + p * (Math.log(2e9) - Math.log(1e8))) / 1e6) *
-                  1e6;
-                setMaxAge(v);
-              }}
+              pct={logPos(scale, 0.001, 0.4) * 100}
+              onPos={(p) =>
+                setScale(
+                  Number(
+                    Math.exp(Math.log(0.001) + p * (Math.log(0.4) - Math.log(0.001))).toPrecision(
+                      2,
+                    ),
+                  ),
+                )
+              }
             />
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint }}>
-              default 200,000,000 · max 2,000,000,000
+              default 0.2 · 0 decouples the trigger from table size
             </div>
           </div>
           <div>
@@ -135,20 +114,24 @@ export function FreezeDemo() {
                 color: C.strong,
               }}
             >
-              <span>xid consumption</span>
-              <span style={{ color: "#fff" }}>{fmtCompact(rate)}/day</span>
+              <span>autovacuum_vacuum_threshold</span>
+              <span style={{ color: "#fff" }}>{fmtInt(thresholdRows)}</span>
             </div>
             <SimpleSlider
-              pct={logPos(rate, 1e6, 4e8) * 100}
+              pct={logPos(Math.max(50, thresholdRows), 50, 5_000_000) * 100}
               onPos={(p) => {
-                const v =
-                  Math.round(Math.exp(Math.log(1e6) + p * (Math.log(4e8) - Math.log(1e6))) / 1e6) *
-                  1e6;
-                setRate(Math.max(1e6, v));
+                const v = Math.exp(Math.log(50) + p * (Math.log(5_000_000) - Math.log(50)));
+                setThresholdRows(
+                  v > 1e6
+                    ? Math.round(v / 1e6) * 1e6
+                    : v > 1000
+                      ? Math.round(v / 100) * 100
+                      : Math.round(v),
+                );
               }}
             />
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint }}>
-              transactions per day, 1 M → 400 M
+              default 50 · the fixed floor
             </div>
           </div>
         </div>
@@ -163,32 +146,28 @@ export function FreezeDemo() {
           }}
         >
           <div style={{ background: C.panel, padding: "8px 10px" }}>
-            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>
-              AGGRESSIVE VACUUM EVERY
-            </div>
+            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>VACUUM EVERY</div>
             <div style={{ fontFamily: MONO, fontSize: 13, color: "#fff", marginTop: 2 }}>
-              {fmtDur(period)}
+              {fmtDur(periodDays)}
             </div>
           </div>
           <div style={{ background: C.panel, padding: "8px 10px" }}>
-            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>RUNS PER YEAR</div>
+            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>PEAK DEAD ROWS</div>
             <div style={{ fontFamily: MONO, fontSize: 13, color: "#fff", marginTop: 2 }}>
-              {(365 / period).toFixed(1)}
+              {fmtCompact(trigger)}
             </div>
           </div>
           <div style={{ background: C.panel, padding: "8px 10px" }}>
-            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>
-              MARGIN TO SHUTDOWN
-            </div>
+            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>PEAK BLOAT</div>
             <div
               style={{
                 fontFamily: MONO,
                 fontSize: 13,
                 marginTop: 2,
-                color: marginDays < 5 ? C.warn : "#fff",
+                color: trigger / LIVE > 0.1 ? C.warn : "#fff",
               }}
             >
-              {fmtDur(marginDays)}
+              {((trigger / LIVE) * 100).toFixed(1)}%
             </div>
           </div>
         </div>
