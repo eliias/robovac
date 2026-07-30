@@ -6,11 +6,11 @@ import { TermLink } from "@/components/TermLink";
 import { useViewport } from "@/components/useViewport";
 import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
 import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
-import { fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
+import { fmtCompact, fmtDur, fmtInt, fmtPeriod, fmtSecs, fmtVal } from "@/lib/core/format";
 import { runCost, threshold } from "@/lib/core/model";
 import { optimize } from "@/lib/core/optimize";
 import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
-import { DEMO_SNAPSHOT, type Snapshot } from "@/lib/core/snapshot";
+import type { Snapshot } from "@/lib/core/snapshot";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
 import { buildSql, OutputPanel } from "./OutputPanel";
@@ -64,9 +64,8 @@ export function ReportView() {
     if (window.innerWidth < 720) setOpen({ trigger: true, cost: false, freeze: false });
     const fragment = window.location.hash;
     if (!fragment || fragment === "#") {
-      const p = { snap: DEMO_SNAPSHOT };
-      setPayload(p);
-      setValues({ ...DEMO_SNAPSHOT.current });
+      // No payload, no report: there is no placeholder data.
+      window.location.replace("/");
       return;
     }
     try {
@@ -136,7 +135,7 @@ export function ReportView() {
 
   const groupSummary = (g: Group): string => {
     if (open[g]) return GROUPS.find((x) => x.id === g)!.jobLine;
-    if (g === "trigger") return `vacuum every ${fmtDur(periodLive)}`;
+    if (g === "trigger") return `vacuum every ${fmtPeriod(periodLive)}`;
     if (g === "cost")
       return `${costLive.mbps.toFixed(1)} MB/s · ${fmtSecs(costLive.seconds)} per pass`;
     return `freeze_max_age ${fmtCompact(values.autovacuum_freeze_max_age)}`;
@@ -264,8 +263,8 @@ export function ReportView() {
                 color: "#ededf0",
               }}
             >
-              Autovacuum fires every {num(fmtDur(periodCur))} at the observed write rate. The table
-              reaches {num(fmtCompact(thrCur))} dead tuples before each run
+              Autovacuum fires every {num(fmtPeriod(periodCur))} at the observed write rate. The
+              table reaches {num(fmtCompact(thrCur))} dead tuples before each run
               {aggressiveNow ? (
                 <>
                   , and relfrozenxid age is past {num("autovacuum_freeze_max_age")}, so every run is
@@ -357,15 +356,25 @@ export function ReportView() {
             color: C.muted,
           }}
         >
-          The table takes {(snap.deadPerDay / 86400).toFixed(1)} dead tuples per second, or{" "}
-          {fmtInt(snap.deadPerDay)} per day.
+          {snap.deadPerDay > 0 ? (
+            <>
+              The table takes {(snap.deadPerDay / 86400).toFixed(1)} dead tuples per second, or{" "}
+              {fmtInt(snap.deadPerDay)} per day.
+            </>
+          ) : (
+            <>
+              The write rate is unknown: this snapshot is a single sample. Run the query twice,
+              30-60 s apart, and the rates, cadences, and proposals sharpen.
+            </>
+          )}
           {sup(1)} With{" "}
           <TermLink slug="autovacuum_vacuum_scale_factor" style={{ fontSize: 13.5 }}>
             autovacuum_vacuum_scale_factor
           </TermLink>{" "}
           at {fmtVal({ fmt: "frac" }, snap.current.autovacuum_vacuum_scale_factor)}, the trigger
-          sits at {fmtInt(thrCur)} dead tuples, which this workload needs {fmtDur(periodCur)} to
-          reach. Each run then rewrites a table that carries roughly{" "}
+          sits at {fmtInt(thrCur)} dead tuples
+          {snap.deadPerDay > 0 && <>, which this workload needs {fmtDur(periodCur)} to reach</>}.
+          Each run then rewrites a table that carries roughly{" "}
           {((thrCur * derived.bytesPerRow) / 1e9).toFixed(1)} GB of dead space, at{" "}
           <TermLink slug="autovacuum_vacuum_cost_delay" style={{ fontSize: 13.5 }}>
             autovacuum_vacuum_cost_delay
@@ -386,9 +395,15 @@ export function ReportView() {
               the worker at {costCur.mbps.toFixed(1)} MB/s.
             </>
           )}{" "}
-          Proposed settings below fire vacuum every{" "}
-          {fmtDur(threshold(snap.proposed, snap.live) / snap.deadPerDay)} and move the freeze work
-          off the wraparound path.
+          {snap.deadPerDay > 0 ? (
+            <>
+              Proposed settings below fire vacuum every{" "}
+              {fmtDur(threshold(snap.proposed, snap.live) / snap.deadPerDay)} and move the freeze
+              work off the wraparound path.
+            </>
+          ) : (
+            <>Proposed settings below move the freeze work off the wraparound path.</>
+          )}
           {derived.analysis.diagnosis && (
             <>
               {" "}
@@ -591,7 +606,9 @@ export function ReportView() {
         }}
       >
         {[
-          `Dead rate derived from two pg_stat_user_tables reads ${agoLabel(snap).replace(" ago", "")} apart: Δ(n_tup_upd − n_tup_hot_upd + n_tup_del) / Δt. HOT updates excluded; they are reclaimed on the page without a vacuum pass.`,
+          snap.deadPerDay > 0
+            ? `Dead rate derived from two statistics reads: Δ(n_tup_upd − n_tup_hot_upd + n_tup_del) / Δt. HOT updates excluded; they are reclaimed on the page without a vacuum pass.`
+            : `Single sample: no rate can be derived from one statistics read. Every figure that needs a rate says "unknown" instead of assuming one.`,
           `Duration model: cost = pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Page mix estimated from pg_statio_user_tables. Real runs vary with shared_buffers pressure${snap.indexes !== null ? ` and index count (${snap.indexes} indexes on this table)` : ""}.`,
           "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
           "Snapshot is a point-in-time read encoded in this URL. Nothing is stored server-side, and nothing here has been applied to your database.",

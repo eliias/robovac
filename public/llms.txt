@@ -15,7 +15,8 @@ Facts an agent needs before proposing an install:
 
 ## Pages
 
-- [Report](/report): the product. Open without a fragment for a demo report.
+- [Home](/): what robovac is, the snapshot query to run, and a paste box that builds a report in the browser.
+- [Report](/report): the product. Needs a snapshot payload in the URL fragment; without one it redirects to the homepage (there is no placeholder data).
 - [MCP setup](/mcp): install instructions, tool list, required grants.
 - [Arcana](/arcana): index of every vacuum term robovac knows.
 - [Explain: xmin](/explain/xmin): MVCC row versions, with an interactive demo.

@@ -24,6 +24,14 @@ export function fmtDur(days: number): string {
   return (h * 60).toFixed(0) + " min";
 }
 
+/**
+ * A vacuum interval derived from a measured rate. A single-sample snapshot has
+ * no rate (deadPerDay 0 → Infinity here): say so instead of inventing one.
+ */
+export function fmtPeriod(days: number): string {
+  return Number.isFinite(days) && days > 0 ? fmtDur(days) : "unknown · one sample";
+}
+
 export function fmtSecs(s: number): string {
   if (s >= 3600) return (s / 3600).toFixed(1) + " h";
   if (s >= 60) return (s / 60).toFixed(0) + " min";

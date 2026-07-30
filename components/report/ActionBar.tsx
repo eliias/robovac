@@ -1,7 +1,7 @@
 "use client";
 
 import { C, MONO, primaryButton, secondaryButton } from "@/components/ui";
-import { fmtDur } from "@/lib/core/format";
+import { fmtPeriod } from "@/lib/core/format";
 
 /**
  * Mobile only: exactly two actions, always reachable. Everything else (resets,
@@ -49,7 +49,7 @@ export function ActionBar({
         }}
       >
         <div style={{ color: pending > 0 ? C.warn : C.dim }}>{pending} proposed pending</div>
-        <div>vacuum every {fmtDur(periodDays)}</div>
+        <div>vacuum every {fmtPeriod(periodDays)}</div>
       </div>
       <button
         className="btn-secondary"
