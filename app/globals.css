@@ -1,0 +1,68 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #08080a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #2a2a2f;
+  color: #fff;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #ffffff;
+}
+
+pre {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+/* Hover states over inline base styles (the prototype used a runtime style-hover). */
+.term-link:hover {
+  color: #ffffff !important;
+}
+
+.btn-primary:hover {
+  background: #ffffff !important;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
+}
+
+.copy-btn:hover {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.demo-btn:hover {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.demo-btn-ghost:hover {
+  color: #ffffff !important;
+}
+
+.group-header:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.arcana-link:hover > span {
+  background: rgba(255, 255, 255, 0.025);
+}
