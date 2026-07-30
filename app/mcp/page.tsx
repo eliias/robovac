@@ -12,7 +12,12 @@ import {
 } from "@/components/ui";
 
 export const metadata: Metadata = {
-  title: "robovac · mcp",
+  title: "Add robovac to your agent — robovac",
+  description:
+    "Install the robovac MCP server: statistics snapshot in, report link and optimized autovacuum settings out. Read-only, no account.",
+  alternates: { canonical: "/mcp" },
+  openGraph: { title: "Add robovac to your agent" },
+  twitter: { title: "Add robovac to your agent" },
 };
 
 const CONFIG = `{
