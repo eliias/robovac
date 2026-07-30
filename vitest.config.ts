@@ -7,5 +7,11 @@ export default defineConfig({
   },
   test: {
     include: ["lib/**/*.test.ts", "packages/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["lib/**", "packages/robovac-mcp/src/**"],
+      exclude: ["**/*.test.ts"],
+      reporter: ["text-summary", "cobertura"],
+    },
   },
 });

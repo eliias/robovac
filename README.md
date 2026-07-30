@@ -1,4 +1,11 @@
-# robovac
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/wordmark-dark.png" />
+    <img alt="robovac" src="./docs/assets/wordmark-light.png" width="280" />
+  </picture>
+</p>
+
+---
 
 > Postgres vacuum tuning made easy
 
