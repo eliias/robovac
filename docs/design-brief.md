@@ -60,4 +60,3 @@ The demos reuse the report-page chart style. One visual system, two zoom levels:
 - Chart style guide: axis, grid, annotations, hover states.
 - Explain page template: definition, demo frame, "see also" list.
 - Landing page.
-

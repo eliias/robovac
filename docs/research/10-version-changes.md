@@ -6,15 +6,15 @@ Each item below is verified against the official release notes. The section for 
 
 ## Quick reference
 
-| Version | Year | Headline vacuum changes | Key new settings |
-|---|---|---|---|
-| 12 | 2019 | Cost delay default 20ms to 2ms, `REINDEX CONCURRENTLY` | `vacuum_truncate` (table option), `INDEX_CLEANUP`, `SKIP_LOCKED` |
-| 13 | 2020 | Parallel index vacuum, insert-triggered autovacuum, B-tree deduplication | `autovacuum_vacuum_insert_threshold`, `autovacuum_vacuum_insert_scale_factor` |
-| 14 | 2021 | Wraparound failsafe, `vacuum_cost_page_miss` 10 to 2, bottom-up index deletion | `vacuum_failsafe_age`, `vacuum_multixact_failsafe_age` |
-| 15 | 2022 | Accurate `relfrozenxid` advancement, autovacuum logging on by default | `log_autovacuum_min_duration` = 10min default |
-| 16 | 2023 | Page-level freezing, configurable ring buffer, live cost-setting reload | `vacuum_buffer_usage_limit`, `BUFFER_USAGE_LIMIT` |
-| 17 | 2024 | Radix-tree TID store, no 1 GB cap, one index pass, compact WAL | (none, removes a limit) |
-| 18 | 2025 | Eager freezing, async I/O, runtime worker count, dead-tuple trigger cap | `vacuum_max_eager_freeze_failure_rate`, `autovacuum_vacuum_max_threshold`, `autovacuum_worker_slots`, `io_method` |
+| Version | Year | Headline vacuum changes                                                        | Key new settings                                                                                                  |
+| ------- | ---- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 12      | 2019 | Cost delay default 20ms to 2ms, `REINDEX CONCURRENTLY`                         | `vacuum_truncate` (table option), `INDEX_CLEANUP`, `SKIP_LOCKED`                                                  |
+| 13      | 2020 | Parallel index vacuum, insert-triggered autovacuum, B-tree deduplication       | `autovacuum_vacuum_insert_threshold`, `autovacuum_vacuum_insert_scale_factor`                                     |
+| 14      | 2021 | Wraparound failsafe, `vacuum_cost_page_miss` 10 to 2, bottom-up index deletion | `vacuum_failsafe_age`, `vacuum_multixact_failsafe_age`                                                            |
+| 15      | 2022 | Accurate `relfrozenxid` advancement, autovacuum logging on by default          | `log_autovacuum_min_duration` = 10min default                                                                     |
+| 16      | 2023 | Page-level freezing, configurable ring buffer, live cost-setting reload        | `vacuum_buffer_usage_limit`, `BUFFER_USAGE_LIMIT`                                                                 |
+| 17      | 2024 | Radix-tree TID store, no 1 GB cap, one index pass, compact WAL                 | (none, removes a limit)                                                                                           |
+| 18      | 2025 | Eager freezing, async I/O, runtime worker count, dead-tuple trigger cap        | `vacuum_max_eager_freeze_failure_rate`, `autovacuum_vacuum_max_threshold`, `autovacuum_worker_slots`, `io_method` |
 
 The table gives the shape. The sections give the numbers and the operational meaning.
 

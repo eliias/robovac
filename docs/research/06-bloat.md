@@ -29,11 +29,11 @@ The practical rule: mass-delete patterns that empty the end of the table (for ex
 
 You have three tools with different cost and accuracy. Use them in this order.
 
-| Method | Cost | Accuracy | Covers |
-|---|---|---|---|
-| `pg_stat_user_tables.n_dead_tup` | Free | Rough estimate, dead tuples only | Tables |
-| Estimation queries (check_postgres, ioguix) | One catalog query | 10 to 30 percent error is normal | Tables and B-tree indexes |
-| pgstattuple / pgstatindex | Full scan of the object | Exact | Tables and indexes |
+| Method                                      | Cost                    | Accuracy                         | Covers                    |
+| ------------------------------------------- | ----------------------- | -------------------------------- | ------------------------- |
+| `pg_stat_user_tables.n_dead_tup`            | Free                    | Rough estimate, dead tuples only | Tables                    |
+| Estimation queries (check_postgres, ioguix) | One catalog query       | 10 to 30 percent error is normal | Tables and B-tree indexes |
+| pgstattuple / pgstatindex                   | Full scan of the object | Exact                            | Tables and indexes        |
 
 **Dead tuple counts.** `pg_stat_user_tables` tracks `n_dead_tup` per table. It is free to read and good for trend alerts. It has two blind spots. The number is an estimate from the statistics system, not a count. And it shows only dead tuples, not free space. A table can be 50 percent bloat with `n_dead_tup = 0`, because VACUUM already converted the dead tuples to free space.
 
@@ -106,12 +106,12 @@ Both features help at the moment a split would happen. Neither one repairs an in
 
 VACUUM prevents bloat. It does not remove existing bloat, except by trailing truncation. These are the rebuild tools:
 
-| Tool | Scope | Lock | Extra disk | Main risk |
-|---|---|---|---|---|
-| VACUUM FULL | Table + its indexes | ACCESS EXCLUSIVE, full duration | ~1x table copy | Blocks all reads and writes until done |
-| REINDEX CONCURRENTLY | Indexes only | Brief locks at phase changes | ~1x index copy | Invalid `_ccnew` index on failure |
-| pg_repack | Table + indexes, online | Brief ACCESS EXCLUSIVE at start and swap | ~1x table + WAL | Leftover artifacts on kill, DDL blocked during run |
-| pg_squeeze | Table + indexes, online | Brief lock at swap only | ~1x table + WAL | Needs `wal_level = logical` and a restart to install |
+| Tool                 | Scope                   | Lock                                     | Extra disk      | Main risk                                            |
+| -------------------- | ----------------------- | ---------------------------------------- | --------------- | ---------------------------------------------------- |
+| VACUUM FULL          | Table + its indexes     | ACCESS EXCLUSIVE, full duration          | ~1x table copy  | Blocks all reads and writes until done               |
+| REINDEX CONCURRENTLY | Indexes only            | Brief locks at phase changes             | ~1x index copy  | Invalid `_ccnew` index on failure                    |
+| pg_repack            | Table + indexes, online | Brief ACCESS EXCLUSIVE at start and swap | ~1x table + WAL | Leftover artifacts on kill, DDL blocked during run   |
+| pg_squeeze           | Table + indexes, online | Brief lock at swap only                  | ~1x table + WAL | Needs `wal_level = logical` and a restart to install |
 
 **VACUUM FULL** rewrites the table into a new file and rebuilds all indexes. It removes all bloat. It holds an ACCESS EXCLUSIVE lock for the whole rewrite, which blocks reads and writes. On a 500 GB table that is hours of downtime. Use it only in a maintenance window, or on small tables. It also needs free disk for the full new copy.
 

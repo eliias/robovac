@@ -15,15 +15,15 @@ Two terms recur below:
 
 The view `pg_stat_progress_vacuum` reports each phase of a running vacuum. The phases run in this order:
 
-| Phase | What it does |
-|---|---|
-| `initializing` | Prepares the scan. This takes milliseconds. |
-| `scanning heap` | Reads table pages, prunes dead rows, collects dead TIDs. |
-| `vacuuming indexes` | Removes the collected TIDs from every index. |
-| `vacuuming heap` | Frees the dead row slots in the table pages. |
-| `cleaning up indexes` | Runs one cleanup callback per index, updates index statistics. |
-| `truncating heap` | Returns empty pages at the end of the table to the OS. |
-| `performing final cleanup` | Vacuums the free space map and updates `pg_class` statistics. |
+| Phase                      | What it does                                                   |
+| -------------------------- | -------------------------------------------------------------- |
+| `initializing`             | Prepares the scan. This takes milliseconds.                    |
+| `scanning heap`            | Reads table pages, prunes dead rows, collects dead TIDs.       |
+| `vacuuming indexes`        | Removes the collected TIDs from every index.                   |
+| `vacuuming heap`           | Frees the dead row slots in the table pages.                   |
+| `cleaning up indexes`      | Runs one cleanup callback per index, updates index statistics. |
+| `truncating heap`          | Returns empty pages at the end of the table to the OS.         |
+| `performing final cleanup` | Vacuums the free space map and updates `pg_class` statistics.  |
 
 The middle three phases can loop. When the dead-TID store fills up, vacuum stops the scan, runs the index and heap phases, empties the store, and resumes the scan. The section on the dead-TID store below explains when this happens.
 
@@ -148,14 +148,14 @@ The sample size is 300 times `default_statistics_target`. At the default target 
 
 The two commands share a name and little else.
 
-| | `VACUUM` | `VACUUM FULL` |
-|---|---|---|
-| Method | Cleans pages in place | Rewrites the table into a new file |
-| Table file size | Shrinks only by tail truncation | Shrinks to the minimum |
-| Lock | `SHARE UPDATE EXCLUSIVE`, reads and writes continue | `ACCESS EXCLUSIVE`, blocks everything |
-| Extra disk | None | Up to the full table size during the rewrite |
-| Indexes | Entries removed | Rebuilt from scratch |
-| Autovacuum runs it | Yes | Never |
+|                    | `VACUUM`                                            | `VACUUM FULL`                                |
+| ------------------ | --------------------------------------------------- | -------------------------------------------- |
+| Method             | Cleans pages in place                               | Rewrites the table into a new file           |
+| Table file size    | Shrinks only by tail truncation                     | Shrinks to the minimum                       |
+| Lock               | `SHARE UPDATE EXCLUSIVE`, reads and writes continue | `ACCESS EXCLUSIVE`, blocks everything        |
+| Extra disk         | None                                                | Up to the full table size during the rewrite |
+| Indexes            | Entries removed                                     | Rebuilt from scratch                         |
+| Autovacuum runs it | Yes                                                 | Never                                        |
 
 `VACUUM FULL` copies every live row into a new file, rebuilds every index, and drops the old file at the end. The table is unreadable and unwritable for the whole rewrite. Treat it as an offline operation of last resort. Chapter 8 covers the online alternatives (for example `pg_repack`) for a table that is already bloated.
 

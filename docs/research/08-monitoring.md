@@ -58,15 +58,15 @@ JOIN pg_stat_activity a USING (pid);
 
 The `phase` column moves through seven values:
 
-| Phase | What happens |
-|---|---|
-| `initializing` | The worker prepares to scan the heap. This phase is short. |
-| `scanning heap` | The worker scans heap pages, prunes, defragments, and freezes tuples. Watch `heap_blks_scanned`. |
-| `vacuuming indexes` | The worker removes dead item pointers from every index. This phase has no block-level progress before Postgres 17. Postgres 17 adds `indexes_processed`. |
-| `vacuuming heap` | The worker marks the collected item pointers in the heap as reusable. Watch `heap_blks_vacuumed`. |
-| `cleaning up indexes` | One final index pass after the full heap scan. |
-| `truncating heap` | The worker returns empty pages at the end of the table to the operating system. This phase takes an exclusive lock in short bursts. |
-| `performing final cleanup` | The worker frees memory, vacuums the free space map, and updates statistics. |
+| Phase                      | What happens                                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initializing`             | The worker prepares to scan the heap. This phase is short.                                                                                               |
+| `scanning heap`            | The worker scans heap pages, prunes, defragments, and freezes tuples. Watch `heap_blks_scanned`.                                                         |
+| `vacuuming indexes`        | The worker removes dead item pointers from every index. This phase has no block-level progress before Postgres 17. Postgres 17 adds `indexes_processed`. |
+| `vacuuming heap`           | The worker marks the collected item pointers in the heap as reusable. Watch `heap_blks_vacuumed`.                                                        |
+| `cleaning up indexes`      | One final index pass after the full heap scan.                                                                                                           |
+| `truncating heap`          | The worker returns empty pages at the end of the table to the operating system. This phase takes an exclusive lock in short bursts.                      |
+| `performing final cleanup` | The worker frees memory, vacuums the free space map, and updates statistics.                                                                             |
 
 Two signals matter most. First, `index_vacuum_count` greater than 1 means the dead tuple memory filled up and vacuum made multiple index passes. Raise `autovacuum_work_mem` in that case. Postgres 17 replaced the dead tuple array with a radix tree, so multiple passes became rare. Second, a `wait_event` of `VacuumDelay` means the worker sleeps because of cost-based delay.
 
@@ -289,21 +289,21 @@ LIMIT 10;
 
 A team that runs large Postgres deployments should carry these alerts. Tune the numbers to your workload, but start here.
 
-| Alert | Source | Warn | Page |
-|---|---|---|---|
-| Wraparound distance | `age(datfrozenxid)`, `mxid_age(datminmxid)` | 500 million | 1 billion |
-| Xmin horizon age | combined horizon query, max `age(xmin_value)` | 100 million XIDs or 1 hour behind | 500 million XIDs |
-| Long transaction | `pg_stat_activity`, `now() - xact_start` | 1 hour | 6 hours |
-| Idle in transaction | `pg_stat_activity`, `state = 'idle in transaction'` | 10 minutes | 1 hour |
-| Inactive replication slot | `pg_replication_slots`, `active = false` | 15 minutes | retained WAL > 10% of disk |
-| Prepared transaction age | `pg_prepared_xacts` | 5 minutes | 1 hour |
-| Dead tuple ratio | `n_dead_tup / (n_live_tup + n_dead_tup)` | 10% on tables > 1 GB | 30% |
-| Table not vacuumed | `greatest(last_vacuum, last_autovacuum)` on churn tables | 1 day | 7 days |
-| Table not analyzed | `greatest(last_analyze, last_autoanalyze)` | 1 day | 7 days |
-| Worker saturation | active workers = `autovacuum_max_workers` | 1 hour sustained | 6 hours sustained |
-| Single vacuum runtime | `pg_stat_progress_vacuum` join `pg_stat_activity` | 6 hours on one table | 24 hours |
-| Multiple index passes | `index_vacuum_count` > 1 (view or log) | any occurrence | not needed |
-| XID burn vs headroom | burn rate and `age(datfrozenxid)` | time to 2 billion < 14 days | < 3 days |
+| Alert                     | Source                                                   | Warn                              | Page                       |
+| ------------------------- | -------------------------------------------------------- | --------------------------------- | -------------------------- |
+| Wraparound distance       | `age(datfrozenxid)`, `mxid_age(datminmxid)`              | 500 million                       | 1 billion                  |
+| Xmin horizon age          | combined horizon query, max `age(xmin_value)`            | 100 million XIDs or 1 hour behind | 500 million XIDs           |
+| Long transaction          | `pg_stat_activity`, `now() - xact_start`                 | 1 hour                            | 6 hours                    |
+| Idle in transaction       | `pg_stat_activity`, `state = 'idle in transaction'`      | 10 minutes                        | 1 hour                     |
+| Inactive replication slot | `pg_replication_slots`, `active = false`                 | 15 minutes                        | retained WAL > 10% of disk |
+| Prepared transaction age  | `pg_prepared_xacts`                                      | 5 minutes                         | 1 hour                     |
+| Dead tuple ratio          | `n_dead_tup / (n_live_tup + n_dead_tup)`                 | 10% on tables > 1 GB              | 30%                        |
+| Table not vacuumed        | `greatest(last_vacuum, last_autovacuum)` on churn tables | 1 day                             | 7 days                     |
+| Table not analyzed        | `greatest(last_analyze, last_autoanalyze)`               | 1 day                             | 7 days                     |
+| Worker saturation         | active workers = `autovacuum_max_workers`                | 1 hour sustained                  | 6 hours sustained          |
+| Single vacuum runtime     | `pg_stat_progress_vacuum` join `pg_stat_activity`        | 6 hours on one table              | 24 hours                   |
+| Multiple index passes     | `index_vacuum_count` > 1 (view or log)                   | any occurrence                    | not needed                 |
+| XID burn vs headroom      | burn rate and `age(datfrozenxid)`                        | time to 2 billion < 14 days       | < 3 days                   |
 
 Two notes on the list. The dead tuple ratio alert needs a size floor, because a 100-row config table with 30 dead rows is noise. The "not vacuumed" alerts only fit tables with steady churn, so scope them to a known list instead of every table.
 
