@@ -77,7 +77,7 @@ A proposal that fails a gate falls back toward current for the offending knob an
 
 `optimize(snapshot, hints) -> { values, reasons, warnings, pattern: { name, score, evidence }, diagnosis?, companions: { toastSql?, clusterAdvice[], fillfactorNote? } }`
 
-- MCP `snapshot_table` accepts the hint fields and returns the full object, URL included.
+- MCP `create_report` accepts the two snapshot rows plus the hint fields and returns the full object, URL included. robovac never connects to a database: `get_snapshot_sql` hands the agent the read-only query it runs itself.
 - The URL payload carries the hints; the report page derives pattern, warnings, and diagnosis from the same `optimize()` the MCP uses, so there is one source of truth.
 - The emergency overlay always produces warnings ranked first ("forced aggressive vacuum is running now", "shutdown in N days"), because the war stories say the warning is worth more than the tuned value.
 

@@ -30,13 +30,12 @@ mise run check   # everything CI runs
 {
   "robovac": {
     "command": "npx",
-    "args": ["-y", "robovac-mcp"],
-    "env": { "DATABASE_URL": "postgres://readonly@host:5432/prod" }
+    "args": ["-y", "robovac-mcp"]
   }
 }
 ```
 
-A role in `pg_monitor` is enough. The server reads statistics catalogs only, never table data, and never writes. Tools: `snapshot_table` (statistics snapshot → report URL + optimized settings), `list_candidates` (rank tables by vacuum pressure), `explain_term` (stable explain URLs).
+No environment variables, no configuration, no database access. robovac never connects to anything: it hands your agent read-only SQL (`get_snapshot_sql`, `get_candidates_sql`), the agent runs it twice on its own connection (a role in `pg_monitor` is enough), and `create_report` turns the two result rows into the report URL, the workload pattern, and the optimized settings. `explain_term` returns stable explain URLs.
 
 ## Layout
 
