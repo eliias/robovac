@@ -12,15 +12,22 @@ import {
 } from "@/components/ui";
 
 export const metadata: Metadata = {
-  title: "robovac · mcp",
+  title: "Add robovac to your agent — robovac",
+  description:
+    "Install the robovac MCP server: statistics snapshot in, report link and optimized autovacuum settings out. Read-only, no account.",
+  alternates: { canonical: "/mcp" },
+  openGraph: { title: "Add robovac to your agent" },
+  twitter: { title: "Add robovac to your agent" },
 };
 
-const CONFIG = `{
-  "robovac": {
-    "command": "npx",
-    "args": ["-y", "robovac-mcp"]
-  }
-}`;
+const CONFIG = `# Claude Code
+claude mcp add --transport http robovac https://robovac.hannesmoser.at/api/mcp
+
+# Codex
+codex mcp add robovac --url https://robovac.hannesmoser.at/api/mcp
+
+# prefer a local process? same tools over stdio:
+npx -y robovac-mcp`;
 
 const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
@@ -96,9 +103,11 @@ export default function McpPage() {
           <span
             style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}
           >
-            ~/.config/mcp/servers.json
+            ADD TO YOUR AGENT
           </span>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>stdio transport</span>
+          <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>
+            streamable http · stdio
+          </span>
         </div>
         <pre
           style={{

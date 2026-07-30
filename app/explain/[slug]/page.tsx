@@ -7,6 +7,7 @@ import { XminDemo } from "@/components/explain/XminDemo";
 import { TermLink } from "@/components/TermLink";
 import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
 import { TERMS } from "@/lib/terms";
+import { requestOrigin } from "@/lib/origin";
 
 interface ExplainContent {
   definition: ReactNode;
@@ -66,7 +67,32 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  return { title: `robovac · ${slug}` };
+  const term = TERMS.find((t) => t.slug === slug && t.built);
+  if (!term) return { title: `robovac · ${slug}` };
+  const card = {
+    url: `/brand/og/explain-${slug}.png`,
+    type: "image/png",
+    width: 1200,
+    height: 630,
+    alt: `robovac: ${term.term}`,
+  };
+  return {
+    title: `${term.term} — robovac`,
+    description: term.blurb,
+    alternates: { canonical: `/explain/${slug}` },
+    openGraph: {
+      type: "article",
+      title: term.term,
+      description: term.blurb,
+      images: [card],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: term.term,
+      description: term.blurb,
+      images: [{ url: card.url, alt: card.alt }],
+    },
+  };
 }
 
 export default async function ExplainPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -77,8 +103,28 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
 
   const { definition, Demo, seeAlso, footnote } = content;
 
+  // These pages are literally definitions; DefinedTerm is the one schema type
+  // that fits without inventing claims.
+  const origin = await requestOrigin();
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "DefinedTerm",
+    name: term.term,
+    description: term.blurb,
+    inDefinedTermSet: {
+      "@type": "DefinedTermSet",
+      name: "robovac arcana",
+      url: `${origin}/arcana`,
+    },
+    url: `${origin}/explain/${slug}`,
+  };
+
   return (
     <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/explain/{slug}</div>
       <h1
         className="page-h1"
