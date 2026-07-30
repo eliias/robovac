@@ -1,8 +1,8 @@
-import { fmtCompact, fmtDur } from "../../../lib/core/format.js";
-import { threshold } from "../../../lib/core/model.js";
-import { optimize } from "../../../lib/core/optimize.js";
-import { SETTINGS, defaultValues, type Values } from "../../../lib/core/settings.js";
-import { SnapshotSchema, type Hints, type Snapshot } from "../../../lib/core/snapshot.js";
+import { fmtCompact, fmtDur } from "../../../lib/core/format";
+import { threshold } from "../../../lib/core/model";
+import { optimize } from "../../../lib/core/optimize";
+import { SETTINGS, defaultValues, type Values } from "../../../lib/core/settings";
+import { SnapshotSchema, type Hints, type Snapshot } from "../../../lib/core/snapshot";
 
 export type Row = Record<string, unknown>;
 

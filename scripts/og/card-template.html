@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- robovac share-card template. 1200 x 630. Replace {{TOKENS}} and screenshot #card.
+     Fidelity note: satori/@vercel/og does not support oklch() — the warning tone is
+     written here as its sRGB equivalent #c98a4b for that reason. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #08080a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      #card {
+        width: 1200px;
+        height: 630px;
+        background: #08080a;
+        padding: 80px 88px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-variant-numeric: tabular-nums;
+      }
+      .mono {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+      }
+      .sans {
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .brand img {
+        width: 44px;
+        height: 44px;
+      }
+      .brand span {
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: #ededf0;
+      }
+      .chip {
+        font-size: 22px;
+        color: #6a6a70;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 5px;
+        padding: 4px 14px;
+      }
+      .route {
+        font-size: 22px;
+        color: #6a6a70;
+      }
+      .title {
+        font-size: 62px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        color: #ffffff;
+        margin-top: 10px;
+      }
+      .blurb {
+        font-size: 34px;
+        line-height: 1.4;
+        color: #b8b8bd;
+        margin-top: 22px;
+        max-width: 980px;
+        text-wrap: pretty;
+      }
+      .foot {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .rule {
+        height: 0;
+        width: 56px;
+        border-top: 2px solid #ffffff;
+      }
+      .foot span {
+        font-size: 22px;
+        color: #8a8a90;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="card">
+      <div class="row">
+        <div class="brand"><img src="/brand/mark-512-light.png" alt="" /><span>robovac</span></div>
+        <div class="mono chip">{{KIND}}</div>
+      </div>
+      <div>
+        <div class="mono route">{{ROUTE}}</div>
+        <div class="mono title">{{TITLE}}</div>
+        <div class="sans blurb">{{BLURB}}</div>
+      </div>
+      <div class="foot mono">
+        <span class="rule"></span>
+        <span>{{FOOTER}}</span>
+      </div>
+    </div>
+  </body>
+</html>

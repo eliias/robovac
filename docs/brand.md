@@ -37,7 +37,7 @@ for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (r + c <= 3) filled.p
 | `mark.svg` / `mark-dark.svg` | vector     | The mark alone, light and dark, for documents and slides                                                             |
 | `wordmark.svg`               | vector     | Mark + wordmark lockup                                                                                               |
 | `mark-512-light/dark.png`    | 512        | Raster mark on transparency, for README headers and decks                                                            |
-| `og-image.png`               | 1200×630   | Open Graph / Twitter card                                                                                            |
+| `og-default.png`             | 1200×630   | Open Graph / Twitter card                                                                                            |
 | `site.webmanifest`           | —          | PWA manifest; `theme_color` and `background_color` both `#08080a`                                                    |
 
 ## `<head>`
@@ -50,7 +50,7 @@ for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (r + c <= 3) filled.p
 <meta name="theme-color" content="#08080a" />
 <meta name="msapplication-TileColor" content="#08080a" />
 <meta name="msapplication-TileImage" content="/brand/mstile-150.png" />
-<meta property="og:image" content="/brand/og-image.png" />
+<meta property="og:image" content="/brand/og-default.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 ```
@@ -79,7 +79,7 @@ oxipng -o 4 --strip safe brand/*.png
 pngquant --quality=100 --speed 1 --ext .png --force brand/*.png && oxipng -o 4 brand/*.png
 ```
 
-Do **not** run `pngquant` on `og-image.png` without checking it — it contains antialiased type and the warning tone, so verify it visually or leave it to `oxipng` alone.
+Do **not** run `pngquant` on `og-default.png` without checking it — it contains antialiased type and the warning tone, so verify it visually or leave it to `oxipng` alone.
 
 **3. Minify the SVGs.**
 
@@ -97,7 +97,7 @@ Keep the `<style>` block and the `prefers-color-scheme` media query in `favicon.
 <link rel="mask-icon" href="/brand/safari-pinned-tab.svg" color="#08080a">
 ```
 
-**5. Serve them right.** Immutable cache headers on everything in `/brand` except `og-image.png`, which social scrapers re-fetch; give that one a shorter TTL or a content hash in the filename when the copy changes.
+**5. Serve them right.** Immutable cache headers on everything in `/brand` except `og-default.png`, which social scrapers re-fetch; give that one a shorter TTL or a content hash in the filename when the copy changes.
 
 **6. Check the two things that break silently.** The 16px favicon against a light browser chrome (the SVG handles it; the ICO does not — that is expected, the ICO is dark-only by design), and the maskable icon in Android's circle and squircle crops.
 

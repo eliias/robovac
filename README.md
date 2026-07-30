@@ -31,18 +31,19 @@ mise run build   # app + mcp package
 mise run check   # everything CI runs
 ```
 
-## Add the MCP server to an agent
+## Add robovac to your agent
 
-```json
-{
-  "robovac": {
-    "command": "npx",
-    "args": ["-y", "robovac-mcp"]
-  }
-}
+Use the public MCP server:
+
+```sh
+# Claude Code
+claude mcp add --transport http robovac https://robovac.hannesmoser.at/api/mcp
+
+# Codex
+codex mcp add robovac --url https://robovac.hannesmoser.at/api/mcp
 ```
 
-No environment variables, no configuration, no database access. robovac never connects to anything: it hands your agent read-only SQL (`get_snapshot_sql`, `get_candidates_sql`), the agent runs it twice on its own connection (a role in `pg_monitor` is enough), and `create_report` turns the two result rows into the report URL, the workload pattern, and the optimized settings. `explain_term` returns stable explain URLs.
+No environment variables, no configuration, no database access. robovac never connects to anything: it hands your agent read-only SQL (`get_snapshot_sql`, `get_candidates_sql`), the agent runs it twice on its own connection (a role in `pg_monitor` is enough), and `create_report` turns the two result rows into the report URL, the workload pattern, and the optimized settings. `explain_term` returns stable explain URLs. Prefer a local process? `npx -y robovac-mcp` speaks stdio with the same tools.
 
 ## Layout
 
