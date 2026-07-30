@@ -78,12 +78,12 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
   const { definition, Demo, seeAlso, footnote } = content;
 
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: "36px 24px 96px" }}>
+    <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
       <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/explain/{slug}</div>
       <h1
+        className="page-h1"
         style={{
           fontFamily: MONO,
-          fontSize: 28,
           fontWeight: 500,
           color: "#fff",
           margin: "6px 0 0",

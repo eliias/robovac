@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { C, MONO, panel, panelHeader } from "@/components/ui";
+import { useViewport } from "@/components/useViewport";
 
 interface DemoRow {
   ctid: string;
@@ -32,7 +33,7 @@ function freshDemo(): DemoState {
   };
 }
 
-const demoButton: React.CSSProperties = {
+const demoButtonBase: React.CSSProperties = {
   fontFamily: MONO,
   fontSize: 11.5,
   color: C.body,
@@ -45,6 +46,9 @@ const demoButton: React.CSSProperties = {
 
 export function XminDemo() {
   const [dm, setDm] = useState<DemoState>(freshDemo);
+  const { mobile } = useViewport();
+  // 44pt minimum touch target on a phone.
+  const demoButton = mobile ? { ...demoButtonBase, minHeight: 44 } : demoButtonBase;
 
   const horizon = dm.snapshotXid === null ? dm.xid : dm.snapshotXid;
   const live = dm.rows.filter((r) => r.xmax === null).length;
@@ -98,7 +102,8 @@ export function XminDemo() {
       };
     });
 
-  const cols = "64px 64px 64px 1fr 96px";
+  // Mobile drops the payload column: 4 columns fit 390pt, 5 do not.
+  const cols = mobile ? "64px 64px 64px 1fr" : "64px 64px 64px 1fr 96px";
 
   return (
     <div style={{ ...panel, marginTop: 28 }}>
@@ -108,8 +113,14 @@ export function XminDemo() {
         </span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>next xid {dm.xid}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 232px", gap: 0 }}>
-        <div style={{ padding: 12, borderRight: `1px solid ${C.border08}` }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: mobile ? "minmax(0,1fr)" : "minmax(0,1fr) 232px",
+          gap: 0,
+        }}
+      >
+        <div style={{ padding: 12, borderRight: mobile ? undefined : `1px solid ${C.border08}` }}>
           <div
             style={{
               display: "grid",
@@ -124,7 +135,7 @@ export function XminDemo() {
             <span>ctid</span>
             <span>xmin</span>
             <span>xmax</span>
-            <span>payload</span>
+            {!mobile && <span>payload</span>}
             <span style={{ textAlign: "right" }}>visibility</span>
           </div>
           {dm.rows.map((r) => {
@@ -159,7 +170,7 @@ export function XminDemo() {
                 <span>{r.ctid}</span>
                 <span>{r.xmin}</span>
                 <span>{r.xmax === null ? "—" : r.xmax}</span>
-                <span style={{ textDecoration: strike }}>{r.payload}</span>
+                {!mobile && <span style={{ textDecoration: strike }}>{r.payload}</span>}
                 <span style={{ textAlign: "right", color: stateColor }}>{state}</span>
               </div>
             );
@@ -187,6 +198,7 @@ export function XminDemo() {
                 padding: "6px 9px",
                 cursor: "pointer",
                 fontWeight: 500,
+                minHeight: mobile ? 44 : undefined,
               }}
             >
               VACUUM
@@ -205,7 +217,15 @@ export function XminDemo() {
             </button>
           </div>
         </div>
-        <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div
+          style={{
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            borderTop: mobile ? `1px solid ${C.border08}` : undefined,
+          }}
+        >
           <div>
             <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>
               LIVE / DEAD TUPLES

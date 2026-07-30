@@ -9,12 +9,12 @@ export const metadata: Metadata = {
 
 export default function ArcanaPage() {
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: "36px 24px 96px" }}>
+    <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
       <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/arcana</div>
       <h1
+        className="page-h1"
         style={{
           fontFamily: MONO,
-          fontSize: 28,
           fontWeight: 500,
           color: "#fff",
           margin: "6px 0 0",
@@ -41,10 +41,8 @@ export default function ArcanaPage() {
           const draft = e.tag === "draft";
           const row = (
             <span
-              className={draft ? undefined : "arcana-row"}
+              className="arcana-row"
               style={{
-                display: "grid",
-                gridTemplateColumns: "300px minmax(0,1fr) 210px",
                 gap: 16,
                 alignItems: "baseline",
                 padding: "12px 0",
@@ -58,7 +56,10 @@ export default function ArcanaPage() {
               <span style={{ fontFamily: SANS, fontSize: 13.5, lineHeight: 1.5, color: C.dim }}>
                 {e.blurb}
               </span>
-              <span style={{ fontFamily: MONO, fontSize: 10, color: C.ghost, textAlign: "right" }}>
+              <span
+                className="arcana-tag"
+                style={{ fontFamily: MONO, fontSize: 10, color: C.ghost }}
+              >
                 {e.kind} · {e.tag}
               </span>
             </span>
