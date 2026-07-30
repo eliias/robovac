@@ -1,59 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
-import { FreezeDemo } from "@/components/explain/FreezeDemo";
-import { XminDemo } from "@/components/explain/XminDemo";
 import { TermLink } from "@/components/TermLink";
 import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
+import { CONTENT } from "@/lib/explain-content";
 import { TERMS } from "@/lib/terms";
 import { requestOrigin } from "@/lib/origin";
-
-interface ExplainContent {
-  definition: ReactNode;
-  Demo: ComponentType;
-  seeAlso: { slug: string; label: string }[];
-  footnote: string;
-}
-
-const m = (text: string) => <span style={{ fontFamily: MONO, color: C.strong }}>{text}</span>;
-
-const CONTENT: Record<string, ExplainContent> = {
-  xmin: {
-    definition: (
-      <>
-        Every row version in a heap carries two hidden system columns: {m("xmin")}, the transaction
-        id that created it, and {m("xmax")}, the transaction id that deleted or superseded it.
-        Postgres never overwrites a row in place — an UPDATE writes a new version and stamps the old
-        one&rsquo;s xmax. A transaction sees a version only if its xmin is committed and visible to
-        that transaction&rsquo;s snapshot, and its xmax is not. Old versions stay on disk until
-        vacuum proves no live snapshot can still need them; that backlog is what {m("n_dead_tup")}{" "}
-        counts.
-      </>
-    ),
-    Demo: XminDemo,
-    seeAlso: [{ slug: "autovacuum_freeze_max_age", label: "autovacuum_freeze_max_age" }],
-    footnote:
-      "The demo shows one heap page and ignores HOT chains, index entries, and the visibility map. Real xids are 32-bit and compared modulo 2^31; see PostgreSQL 16 docs §66.4 “Visibility Map” and §25.1.5 “Preventing Transaction ID Wraparound Failures”.",
-  },
-  autovacuum_freeze_max_age: {
-    definition: (
-      <>
-        Transaction ids are 32-bit and wrap. A row whose <TermLink slug="xmin">xmin</TermLink> falls
-        more than 2^31 transactions behind the current xid would appear to be in the future, so
-        Postgres must mark old rows frozen before that happens. {m("autovacuum_freeze_max_age")} is
-        the table age at which autovacuum stops being optional: a worker is launched even if the
-        table is otherwise idle and autovacuum is switched off. Setting it low means frequent
-        aggressive scans; setting it high means fewer, larger ones and less margin before the 2^31
-        limit forces a single-user shutdown.
-      </>
-    ),
-    Demo: FreezeDemo,
-    seeAlso: [{ slug: "xmin", label: "xmin" }],
-    footnote:
-      "Margin assumes the aggressive run completes before the next threshold. It does not: at 1,000,000 xids of remaining headroom Postgres refuses new write transactions and the cluster requires single-user VACUUM. The chart holds the table age flat during a run; a real run takes time proportional to unfrozen pages.",
-  },
-};
 
 export function generateStaticParams() {
   return TERMS.filter((t) => t.built).map((t) => ({ slug: t.slug }));
@@ -150,15 +102,15 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
         {definition}
       </p>
 
-      <Demo />
+      {Demo && <Demo />}
 
       <div style={{ marginTop: 26, display: "flex", flexDirection: "column", gap: 7 }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint, letterSpacing: "0.05em" }}>
           SEE ALSO
         </div>
-        {seeAlso.map((s) => (
-          <TermLink key={s.slug} slug={s.slug} style={{ fontSize: 13, alignSelf: "flex-start" }}>
-            {s.label}
+        {seeAlso.map((slug2) => (
+          <TermLink key={slug2} slug={slug2} style={{ fontSize: 13, alignSelf: "flex-start" }}>
+            {TERMS.find((t) => t.slug === slug2)?.term ?? slug2}
           </TermLink>
         ))}
         <Link
