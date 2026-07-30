@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="robovac">
+  <rect x="0" y="0" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="26" y="0" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="52" y="0" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="78" y="0" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="0" y="26" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="26" y="26" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="52" y="26" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="0" y="52" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="26" y="52" width="18" height="18" fill="#ededf0"></rect>
+  <rect x="0" y="78" width="18" height="18" fill="#ededf0"></rect>
+</svg>
