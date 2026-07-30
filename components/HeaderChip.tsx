@@ -3,15 +3,11 @@
 import { usePathname } from "next/navigation";
 import { C, MONO } from "@/components/ui";
 
-/** Route-aware header chip: the promise that matters on each page. */
+/** Route-aware header chip. The homepage carries no chip: the page says it. */
 export function HeaderChip() {
   const pathname = usePathname();
-  const text =
-    pathname === "/"
-      ? "no account · nothing stored"
-      : pathname.startsWith("/report")
-        ? "snapshot · read-only"
-        : "reference";
+  if (pathname === "/") return null;
+  const text = pathname.startsWith("/report") ? "snapshot · read-only" : "reference";
   return (
     <span
       className="m-hide"
