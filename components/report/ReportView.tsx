@@ -1,0 +1,611 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { TermLink } from "@/components/TermLink";
+import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
+import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
+import { fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
+import { runCost, threshold } from "@/lib/core/model";
+import { optimize } from "@/lib/core/optimize";
+import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
+import { DEMO_SNAPSHOT, type Snapshot } from "@/lib/core/snapshot";
+import { ErrorState } from "./ErrorState";
+import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
+import { OutputPanel } from "./OutputPanel";
+import { Slider } from "./Slider";
+
+const GROUPS: { id: Group; title: string; jobLine: string }[] = [
+  { id: "trigger", title: "TRIGGER", jobLine: "when a worker starts on this table" },
+  { id: "cost", title: "COST", jobLine: "how fast the worker is allowed to go" },
+  { id: "freeze", title: "FREEZE", jobLine: "when old rows get frozen against wraparound" },
+];
+
+function sup(n: number) {
+  return <sup style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>{n}</sup>;
+}
+
+function num(text: string) {
+  return <span style={{ fontFamily: MONO }}>{text}</span>;
+}
+
+function agoLabel(snap: Snapshot): string {
+  if (!snap.lastAutovacuum) return "never";
+  const ms = Date.parse(snap.capturedAt) - Date.parse(snap.lastAutovacuum);
+  const totalHours = Math.max(0, Math.floor(ms / 3600000));
+  const d = Math.floor(totalHours / 24);
+  const h = totalHours % 24;
+  if (d > 0) return `${d} d ${String(h).padStart(2, "0")} h ago`;
+  return `${h} h ago`;
+}
+
+function snapshotLabel(snap: Snapshot): string {
+  const t = new Date(snap.capturedAt);
+  return t.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+}
+
+export function ReportView() {
+  const [payload, setPayload] = useState<ReportPayload | null>(null);
+  const [issues, setIssues] = useState<string[] | null>(null);
+  const [values, setValues] = useState<Values | null>(null);
+  const [open, setOpen] = useState<Record<Group, boolean>>({
+    trigger: true,
+    cost: true,
+    freeze: true,
+  });
+  const [copied, setCopied] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  const userChanged = useRef(false);
+
+  useEffect(() => {
+    const fragment = window.location.hash;
+    if (!fragment || fragment === "#") {
+      const p = { snap: DEMO_SNAPSHOT };
+      setPayload(p);
+      setValues({ ...DEMO_SNAPSHOT.current });
+      return;
+    }
+    try {
+      const p = decodeReport(fragment);
+      setPayload(p);
+      const merged: Values = { ...p.snap.current };
+      for (const [key, v] of Object.entries(p.tuned ?? {})) {
+        if (v !== undefined) merged[key] = v;
+      }
+      setValues(merged);
+    } catch (e) {
+      setIssues(e instanceof CodecError ? e.issues : [String(e)]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 1120);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!payload || !values || !userChanged.current) return;
+    const tuned: Partial<Values> = {};
+    for (const d of SETTINGS) {
+      if (values[d.key] !== payload.snap.current[d.key]) tuned[d.key] = values[d.key];
+    }
+    history.replaceState(null, "", "#" + encodeReport({ snap: payload.snap, tuned }));
+  }, [payload, values]);
+
+  const setAll = (next: Values) => {
+    userChanged.current = true;
+    setCopied(false);
+    setValues(next);
+  };
+
+  const derived = useMemo(() => {
+    if (!payload || !values) return null;
+    const snap = payload.snap;
+    const thrCur = threshold(snap.current, snap.live);
+    const thrLive = threshold(values, snap.live);
+    return {
+      snap,
+      thrCur,
+      thrLive,
+      periodCur: thrCur / snap.deadPerDay,
+      periodLive: thrLive / snap.deadPerDay,
+      costCur: runCost(snap.current, snap.pages),
+      costLive: runCost(values, snap.pages),
+      aggressiveNow: snap.xidAge > snap.current.autovacuum_freeze_max_age,
+      bytesPerRow: (snap.pages * 8192) / Math.max(1, snap.live),
+      analysis: optimize(snap),
+    };
+  }, [payload, values]);
+
+  if (issues) return <ErrorState issues={issues} />;
+  if (!payload || !values || !derived) return null;
+
+  const { snap, thrCur, periodCur, periodLive, costCur, costLive, aggressiveNow } = derived;
+  const gridCols = narrow ? "minmax(0,1fr)" : "minmax(0,1fr) 520px";
+  const pending = SETTINGS.filter((d) => values[d.key] !== snap.proposed[d.key]).length;
+
+  const note = (key: string): string => {
+    if (key === "autovacuum_vacuum_scale_factor") {
+      return `${fmtCompact(threshold(snap.proposed, snap.live))} dead rows at trigger`;
+    }
+    if (key === "autovacuum_freeze_max_age" && snap.xidAge > values.autovacuum_freeze_max_age) {
+      return "currently exceeded";
+    }
+    return SETTINGS.find((d) => d.key === key)?.note ?? "";
+  };
+
+  const groupSummary = (g: Group): string => {
+    if (open[g]) return GROUPS.find((x) => x.id === g)!.jobLine;
+    if (g === "trigger") return `vacuum every ${fmtDur(periodLive)}`;
+    if (g === "cost")
+      return `${costLive.mbps.toFixed(1)} MB/s · ${fmtSecs(costLive.seconds)} per pass`;
+    return `freeze_max_age ${fmtCompact(values.autovacuum_freeze_max_age)}`;
+  };
+
+  const statCells: { label: string; value: React.ReactNode; color?: string }[] = [
+    { label: "DATABASE", value: snap.db },
+    {
+      label: "HEAP SIZE",
+      value: (
+        <>
+          {((snap.pages * 8192) / 1e9).toFixed(1)} GB
+          <span style={{ color: C.faint, fontSize: 11 }}> / {fmtInt(snap.pages)} pg</span>
+        </>
+      ),
+    },
+    { label: "SNAPSHOT", value: snapshotLabel(snap) },
+    { label: "n_live_tup", value: fmtInt(snap.live) },
+    {
+      label: "n_dead_tup",
+      value: (
+        <>
+          {fmtInt(snap.dead)}
+          <span style={{ color: C.faint, fontSize: 11 }}>
+            {" "}
+            / {((snap.dead / Math.max(1, snap.live)) * 100).toFixed(2)}%
+          </span>
+        </>
+      ),
+    },
+    { label: "last_autovacuum", value: agoLabel(snap) },
+    {
+      label: "DEAD RATE",
+      value: (
+        <>
+          {(snap.deadPerDay / 86400).toFixed(1)}
+          <span style={{ color: C.faint, fontSize: 11 }}> tup/s</span>
+        </>
+      ),
+    },
+    { label: "XID AGE", value: fmtInt(snap.xidAge), color: C.warn },
+    {
+      label: "XID RATE",
+      value: (
+        <>
+          {(snap.xidPerDay / 1e6).toFixed(1)}
+          <span style={{ color: C.faint, fontSize: 11 }}> M/day</span>
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth: 1380, margin: "0 auto", padding: "0 24px 96px" }}>
+      {/* Band A: header */}
+      <div
+        style={{
+          display: "grid",
+          gap: 48,
+          padding: "36px 0 28px",
+          borderBottom: `1px solid ${C.border08}`,
+          gridTemplateColumns: gridCols,
+        }}
+      >
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span
+              style={{ fontFamily: MONO, fontSize: 11, color: C.faint, letterSpacing: "0.04em" }}
+            >
+              TABLE
+            </span>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 10.5,
+                color: C.dim,
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 3,
+                padding: "1px 5px",
+              }}
+            >
+              pattern · {derived.analysis.pattern.name}
+            </span>
+          </div>
+          <h1
+            style={{
+              fontFamily: MONO,
+              fontSize: 30,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+              color: "#fff",
+              margin: "6px 0 0",
+            }}
+          >
+            {snap.table}
+          </h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              marginTop: 18,
+              maxWidth: 560,
+            }}
+          >
+            <span
+              style={{
+                flex: "none",
+                marginTop: 5,
+                width: 7,
+                height: 7,
+                background: C.warn,
+                borderRadius: "50%",
+              }}
+            />
+            <p
+              style={{
+                margin: 0,
+                fontFamily: SANS,
+                fontSize: 15,
+                lineHeight: 1.5,
+                color: "#ededf0",
+              }}
+            >
+              Autovacuum fires every {num(fmtDur(periodCur))} at the observed write rate. The table
+              reaches {num(fmtCompact(thrCur))} dead tuples before each run
+              {aggressiveNow ? (
+                <>
+                  , and relfrozenxid age is past {num("autovacuum_freeze_max_age")}, so every run is
+                  aggressive.
+                </>
+              ) : (
+                "."
+              )}
+            </p>
+          </div>
+          {derived.analysis.warnings.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 5,
+                marginTop: 12,
+                maxWidth: 560,
+              }}
+            >
+              {derived.analysis.warnings.map((w, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    paddingLeft: 9,
+                    borderLeft: `1px solid ${C.warn}`,
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    lineHeight: 1.6,
+                    color: C.dim,
+                  }}
+                >
+                  {w}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 1,
+            background: C.border08,
+            border: `1px solid ${C.border08}`,
+            gridTemplateColumns: narrow ? "repeat(2,1fr)" : "repeat(3,1fr)",
+          }}
+        >
+          {statCells.map((cell) => (
+            <div key={cell.label} style={{ background: C.cell, padding: "10px 12px" }}>
+              <div
+                style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.03em" }}
+              >
+                {cell.label}
+              </div>
+              <div
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 13.5,
+                  color: cell.color ?? C.strong,
+                  marginTop: 3,
+                }}
+              >
+                {cell.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Band B: reading + actions */}
+      <div
+        style={{
+          display: "grid",
+          gap: 48,
+          padding: "22px 0 26px",
+          borderBottom: `1px solid ${C.border08}`,
+          gridTemplateColumns: gridCols,
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            maxWidth: 760,
+            fontFamily: SANS,
+            fontSize: 14.5,
+            lineHeight: 1.65,
+            color: C.muted,
+          }}
+        >
+          The table takes {(snap.deadPerDay / 86400).toFixed(1)} dead tuples per second, or{" "}
+          {fmtInt(snap.deadPerDay)} per day.
+          {sup(1)} With{" "}
+          <TermLink slug="autovacuum_vacuum_scale_factor" style={{ fontSize: 13.5 }}>
+            autovacuum_vacuum_scale_factor
+          </TermLink>{" "}
+          at {fmtVal({ fmt: "frac" }, snap.current.autovacuum_vacuum_scale_factor)}, the trigger
+          sits at {fmtInt(thrCur)} dead tuples, which this workload needs {fmtDur(periodCur)} to
+          reach. Each run then rewrites a table that carries roughly{" "}
+          {((thrCur * derived.bytesPerRow) / 1e9).toFixed(1)} GB of dead space, at{" "}
+          <TermLink slug="autovacuum_vacuum_cost_delay" style={{ fontSize: 13.5 }}>
+            autovacuum_vacuum_cost_delay
+          </TermLink>{" "}
+          = {fmtInt(snap.current.autovacuum_vacuum_cost_delay)} ms, which throttles the worker to{" "}
+          {costCur.mbps.toFixed(1)} MB/s and holds it on the table for {fmtSecs(costCur.seconds)}.
+          {sup(2)}
+          {aggressiveNow && (
+            <>
+              {" "}
+              Separately, relfrozenxid age is {fmtInt(snap.xidAge)}, above{" "}
+              <TermLink slug="autovacuum_freeze_max_age" style={{ fontSize: 13.5 }}>
+                autovacuum_freeze_max_age
+              </TermLink>{" "}
+              = {fmtInt(snap.current.autovacuum_freeze_max_age)}, so autovacuum currently runs in
+              aggressive mode and cannot be cancelled by a conflicting lock request. The two
+              problems compound: aggressive runs read every unfrozen page while the cost limit keeps
+              the worker at {costCur.mbps.toFixed(1)} MB/s.
+            </>
+          )}{" "}
+          Proposed settings below fire vacuum every{" "}
+          {fmtDur(threshold(snap.proposed, snap.live) / snap.deadPerDay)} and move the freeze work
+          off the wraparound path.
+          {derived.analysis.diagnosis && (
+            <>
+              {" "}
+              <span style={{ color: C.strong }}>{derived.analysis.diagnosis}</span>
+            </>
+          )}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignSelf: "start" }}>
+          <button
+            className="btn-primary"
+            onClick={() => setAll({ ...snap.proposed })}
+            style={{ ...primaryButton, textAlign: "left" }}
+          >
+            {pending === 0
+              ? "✓ all sliders sit at the proposed values"
+              : `→ auto-optimize · apply ${pending} proposed value${pending === 1 ? "" : "s"}`}
+          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="btn-secondary"
+              onClick={() => setAll({ ...snap.current })}
+              style={{ ...secondaryButton, flex: 1 }}
+            >
+              reset to current
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                const v: Values = {};
+                for (const d of SETTINGS) v[d.key] = d.def;
+                setAll(v);
+              }}
+              style={{ ...secondaryButton, flex: 1 }}
+            >
+              reset to pg defaults
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Band C: controls + charts */}
+      <div
+        style={{
+          display: "grid",
+          gap: 48,
+          alignItems: "start",
+          paddingTop: 26,
+          gridTemplateColumns: gridCols,
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
+          {GROUPS.map((g) => {
+            const defs = settingsByGroup(g.id);
+            return (
+              <div key={g.id}>
+                <div
+                  className="group-header"
+                  onClick={() => setOpen((o) => ({ ...o, [g.id]: !o[g.id] }))}
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    borderBottom: `1px solid ${C.borderStrong}`,
+                    paddingBottom: 7,
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  <h2
+                    style={{
+                      margin: 0,
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 8,
+                      fontFamily: MONO,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: "0.06em",
+                      color: "#fff",
+                    }}
+                  >
+                    <span style={{ display: "inline-block", width: 9, color: C.dim }}>
+                      {open[g.id] ? "−" : "+"}
+                    </span>
+                    {g.title}
+                    <span
+                      style={{ fontWeight: 400, letterSpacing: 0, color: C.ghost, fontSize: 10.5 }}
+                    >
+                      {defs.length} settings
+                    </span>
+                  </h2>
+                  <span
+                    style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint, textAlign: "right" }}
+                  >
+                    {groupSummary(g.id)}
+                  </span>
+                </div>
+                {open[g.id] &&
+                  defs.map((d) => (
+                    <Slider
+                      key={d.key}
+                      def={d}
+                      value={values[d.key]}
+                      current={snap.current[d.key]}
+                      proposed={snap.proposed[d.key]}
+                      note={note(d.key)}
+                      onChange={(v) => setAll({ ...values, [d.key]: v })}
+                    />
+                  ))}
+              </div>
+            );
+          })}
+
+          <div
+            style={{
+              display: "flex",
+              gap: 22,
+              alignItems: "center",
+              flexWrap: "wrap",
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: C.faint,
+              paddingTop: 2,
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{ width: 1, height: 12, background: C.ghost, display: "inline-block" }}
+              />
+              postgres default
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 1, height: 12, background: C.dim, display: "inline-block" }} />
+              current on this table
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 1, height: 12, background: C.warn, display: "inline-block" }} />
+              robovac proposal
+            </span>
+            <span style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
+              <a
+                onClick={() => setOpen({ trigger: false, cost: false, freeze: false })}
+                style={{ cursor: "pointer", borderBottom: "1px dotted #35353c" }}
+              >
+                collapse all
+              </a>
+              <a
+                onClick={() => setOpen({ trigger: true, cost: true, freeze: true })}
+                style={{ cursor: "pointer", borderBottom: "1px dotted #35353c" }}
+              >
+                expand all
+              </a>
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            top: 70,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            position: narrow ? "static" : "sticky",
+          }}
+        >
+          <FigDeadTuples snap={snap} values={values} />
+          <FigFreezeHorizon snap={snap} values={values} />
+          <FigIoCost snap={snap} values={values} />
+          <OutputPanel
+            snap={snap}
+            values={values}
+            copied={copied}
+            onCopy={(sql) => {
+              try {
+                navigator.clipboard.writeText(sql);
+              } catch {
+                /* clipboard unavailable */
+              }
+              setCopied(true);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Footnotes */}
+      <div
+        style={{
+          marginTop: 44,
+          paddingTop: 14,
+          borderTop: `1px solid ${C.border08}`,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          maxWidth: 840,
+        }}
+      >
+        {[
+          `Dead rate derived from two pg_stat_user_tables reads ${agoLabel(snap).replace(" ago", "")} apart: Δ(n_tup_upd − n_tup_hot_upd + n_tup_del) / Δt. HOT updates excluded; they are reclaimed on the page without a vacuum pass.`,
+          `Duration model: cost = pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Page mix estimated from pg_statio_user_tables. Real runs vary with shared_buffers pressure${snap.indexes !== null ? ` and index count (${snap.indexes} indexes on this table)` : ""}.`,
+          "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
+          "Snapshot is a point-in-time read encoded in this URL. Nothing is stored server-side, and nothing here has been applied to your database.",
+        ].map((text, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              gap: 9,
+              fontFamily: MONO,
+              fontSize: 10.5,
+              color: C.faint,
+              lineHeight: 1.6,
+            }}
+          >
+            <span>{i + 1}</span>
+            <span>{text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
