@@ -1,27 +1,28 @@
 [tools]
 node = "24"
+pnpm = "10"
 
 [tasks.dev]
 description = "Start the next dev server"
-run = "npm run dev"
+run = "pnpm run dev"
 
 [tasks.build]
 description = "Build the app and the mcp package"
-run = ["npm run build", "npm run build --workspace=robovac-mcp"]
+run = ["pnpm run build", "pnpm --filter robovac-mcp run build"]
 
 [tasks.test]
 description = "Run the vitest suite"
-run = "npm test"
+run = "pnpm test"
 
 [tasks.lint]
 description = "Lint with oxlint"
-run = "npm run lint"
+run = "pnpm run lint"
 
 [tasks.fmt]
 description = "Format with oxfmt"
-run = "npm run format"
+run = "pnpm run format"
 
 [tasks.check]
 description = "Everything CI would run: format check, lint, tests, builds"
 depends = ["lint", "test", "build"]
-run = "npm run format:check"
+run = "pnpm run format:check"
