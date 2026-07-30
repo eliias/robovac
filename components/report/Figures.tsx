@@ -1,7 +1,7 @@
 "use client";
 
 import { C, MONO, panel, panelHeader } from "@/components/ui";
-import { fmtCompact, fmtDur, fmtInt, fmtSecs } from "@/lib/core/format";
+import { fmtCompact, fmtDur, fmtInt, fmtPeriod, fmtSecs } from "@/lib/core/format";
 import {
   WRAP,
   daysToAggressive,
@@ -119,11 +119,11 @@ export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values
           cells={[
             {
               label: "CURRENT · dashed",
-              value: `${fmtDur(thrCur / snap.deadPerDay)} · ${fmtCompact(thrCur)} peak`,
+              value: `${fmtPeriod(thrCur / snap.deadPerDay)} · ${fmtCompact(thrCur)} peak`,
             },
             {
               label: "SLIDERS · solid",
-              value: `${fmtDur(thrLive / snap.deadPerDay)} · ${fmtCompact(thrLive)} peak`,
+              value: `${fmtPeriod(thrLive / snap.deadPerDay)} · ${fmtCompact(thrLive)} peak`,
               color: "#fff",
             },
           ]}

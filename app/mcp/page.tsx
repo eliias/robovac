@@ -155,11 +155,11 @@ export default function McpPage() {
 
       <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
         <Link
-          href="/report"
+          href="/"
           className="btn-primary"
           style={{ ...primaryButton, display: "inline-block" }}
         >
-          → open the demo report
+          → build a report from your table
         </Link>
         <Link
           href="/arcana"

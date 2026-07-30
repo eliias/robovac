@@ -1,4 +1,6 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import { HeaderChip } from "@/components/HeaderChip";
 import { C, MONO } from "@/components/ui";
 
 export function Header() {
@@ -21,8 +23,11 @@ export function Header() {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <Link
-          href="/report"
+          href="/"
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
             fontFamily: MONO,
             fontSize: 13,
             fontWeight: 600,
@@ -30,21 +35,16 @@ export function Header() {
             color: "#fff",
           }}
         >
+          <img
+            src="/brand/mark-512-light.png"
+            alt=""
+            width={15}
+            height={15}
+            style={{ display: "block" }}
+          />
           robovac
         </Link>
-        <span
-          className="m-hide"
-          style={{
-            fontFamily: MONO,
-            fontSize: 10.5,
-            color: C.faint,
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 3,
-            padding: "1px 5px",
-          }}
-        >
-          snapshot · read-only
-        </span>
+        <HeaderChip />
       </div>
       <div
         style={{
@@ -56,15 +56,8 @@ export function Header() {
           color: C.dim,
         }}
       >
-        <Link href="/report" className="navlink">
-          /report
-        </Link>
-        <Link href="/mcp" className="navlink">
-          /mcp
-        </Link>
-        <Link href="/arcana" className="navlink">
-          /arcana
-        </Link>
+        <Link href="/mcp">/mcp</Link>
+        <Link href="/arcana">/arcana</Link>
       </div>
     </div>
   );

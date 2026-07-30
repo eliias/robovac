@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WRAP, daysToAggressive, runCost, sawPath, shutdownMarginDays, threshold } from "./model";
-import { DEMO_SNAPSHOT } from "./snapshot";
+import { DEMO_SNAPSHOT } from "./fixtures";
 
 const snap = DEMO_SNAPSHOT;
 

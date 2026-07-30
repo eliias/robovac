@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CodecError, decodeReport, encodeReport } from "./codec";
-import { DEMO_SNAPSHOT } from "./snapshot";
+import { DEMO_SNAPSHOT } from "./fixtures";
 
 describe("codec", () => {
   it("round-trips the demo snapshot", () => {

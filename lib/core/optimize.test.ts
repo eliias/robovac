@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runCost, threshold } from "./model";
 import { optimize, roundHuman, type SnapshotStats } from "./optimize";
 import { SETTINGS, defaultValues } from "./settings";
-import { DEMO_SNAPSHOT } from "./snapshot";
+import { DEMO_SNAPSHOT } from "./fixtures";
 
 const { proposed: _drop, ...demoStats } = DEMO_SNAPSHOT;
 

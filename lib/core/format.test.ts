@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal, fromPos, toPos } from "./format";
 import { SETTINGS } from "./settings";
-import { DEMO_SNAPSHOT, SnapshotSchema } from "./snapshot";
+import { DEMO_SNAPSHOT } from "./fixtures";
+import { SnapshotSchema } from "./snapshot";
 
 const byKey = (key: string) => {
   const d = SETTINGS.find((s) => s.key === key);

@@ -58,11 +58,11 @@ export function ErrorState({ issues }: { issues: string[] }) {
           how to generate a link → /mcp
         </Link>
         <Link
-          href="/report"
+          href="/"
           className="term-link"
           style={{ ...termLinkStyle, fontSize: 13, alignSelf: "flex-start" }}
         >
-          open the demo report instead
+          start at the homepage
         </Link>
       </div>
     </div>

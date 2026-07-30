@@ -162,11 +162,11 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
           </TermLink>
         ))}
         <Link
-          href="/report"
+          href="/"
           className="term-link"
           style={{ ...termLinkStyle, fontSize: 13, alignSelf: "flex-start" }}
         >
-          ← back to events.event_log
+          ← back to start
         </Link>
       </div>
       <div
