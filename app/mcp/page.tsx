@@ -18,21 +18,25 @@ export const metadata: Metadata = {
 const CONFIG = `{
   "robovac": {
     "command": "npx",
-    "args": ["-y", "robovac-mcp"],
-    "env": { "DATABASE_URL": "postgres://readonly@host:5432/prod" }
+    "args": ["-y", "robovac-mcp"]
   }
 }`;
 
 const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
-    title: "snapshot_table",
-    sig: "(schema, table, …hints) → url",
-    body: "Reads pg_stat_user_tables, pg_class, pg_settings, and the reloptions on the table. Two reads ~30 s apart give the write and xid rates. Optional hints (pattern, replication_lag_budget, storage, fk_heavy, …) sharpen the classification.",
+    title: "get_snapshot_sql",
+    sig: "(schema, table) → sql",
+    body: "Hands your agent the read-only statistics query (pg_stat_user_tables, pg_class, pg_settings, reloptions). The agent runs it twice, 30-60 s apart, on its own connection. The delay turns counters into rates.",
   },
   {
-    title: "list_candidates",
-    sig: "(limit) → table[]",
-    body: "Ranks tables by dead-tuple ratio and xid age, so the agent knows which one to snapshot without being told.",
+    title: "create_report",
+    sig: "(first, second, …hints) → url",
+    body: "Takes the two result rows and returns the report URL, the workload pattern, warnings, and the optimized settings with one reason per change. Optional hints (pattern, replication_lag_budget, storage, fk_heavy, …) sharpen the classification.",
+  },
+  {
+    title: "get_candidates_sql",
+    sig: "(limit) → sql",
+    body: "The ranking query (dead-tuple ratio plus xid age), for when the agent has to find the table worth snapshotting first.",
   },
   {
     title: "explain_term",
@@ -50,7 +54,7 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
     title: "required grants",
     sig: "pg_monitor",
-    body: "A role in pg_monitor is enough. No table data is read, ever: the server touches statistics catalogs only.",
+    body: "For your agent's own connection: a role in pg_monitor is enough. No table data is read, ever. robovac itself needs nothing — no DATABASE_URL, no env, no connection.",
   },
 ];
 
@@ -79,11 +83,11 @@ export default function McpPage() {
           margin: "16px 0 0",
         }}
       >
-        robovac is an MCP server with one job: take a statistics snapshot of one table and return a
-        link. The link carries the whole snapshot in its URL fragment. There is no account, no
-        stored state, and no write path back to your database — the server never issues anything but{" "}
-        <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span> against the statistics
-        views.
+        robovac is an MCP server with one job: turn a statistics snapshot of one table into a link.
+        It never connects to your database — it hands your agent a read-only{" "}
+        <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span>, the agent runs it twice
+        on its own connection, and robovac computes the report from the two result rows. There is no
+        account, no stored state, no environment variable, and no write path anywhere.
         <sup style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>1</sup>
       </p>
 

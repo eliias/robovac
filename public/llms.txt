@@ -4,14 +4,14 @@
 
 Facts an agent needs before proposing an install:
 
-- The MCP server is the npm package `robovac-mcp` (stdio transport). Run it with `npx -y robovac-mcp` and set `DATABASE_URL` to a read-only connection string. A role in `pg_monitor` is enough.
-- Tools: `snapshot_table(schema, table, sample_seconds, ...hints)` returns a report URL, a verdict, a workload-pattern classification, warnings, proposed settings, and one reason per changed setting. `list_candidates(limit)` ranks tables by vacuum pressure. `explain_term(term)` returns a stable explain URL.
+- The MCP server is the npm package `robovac-mcp` (stdio transport). Run it with `npx -y robovac-mcp`. It needs no environment variables and no configuration, and it never connects to a database.
+- Tools: `get_snapshot_sql(schema, table)` and `get_candidates_sql(limit)` return read-only SQL that your agent runs on its own connection (a role in `pg_monitor` is enough). `create_report(first, second, ...hints)` takes the two snapshot rows (run the SQL twice, 30-60 s apart) and returns a report URL, a verdict, a workload-pattern classification, warnings, proposed settings, and one reason per changed setting. `explain_term(term)` returns a stable explain URL.
 - The optimizer is cadence-first and pattern-based: it classifies the table (append-only, queue, large-update-heavy, mixed-oltp, cold), solves for a target vacuum cadence in time units, chains the freeze ages to that cadence, and simulates the proposal against the current settings before it recommends anything. Optional hints sharpen it: `pattern`, `replication_lag_budget` (none|tight|relaxed), `storage` (ssd|hdd), `ram_bytes`, `max_workers`, `long_transactions`, `fk_heavy`.
 - When dead rows stay high although autovacuum runs on schedule, robovac reports a pinned xmin horizon and returns a diagnosis instead of settings.
-- The server reads statistics catalogs only (`pg_stat_user_tables`, `pg_class`, `pg_settings`, reloptions). It never reads table data and never writes anything.
-- `snapshot_table` samples the statistics twice (default 15 s apart) to measure the dead-row rate and the xid consumption rate, so one call takes at least `sample_seconds`.
+- The SQL reads statistics catalogs only (`pg_stat_user_tables`, `pg_class`, `pg_settings`, reloptions). It never reads table data and never writes anything.
+- The two snapshot runs, 30-60 s apart, are what turn counters into rates (dead rows/day, inserts/day, xids/day). Do not skip the delay.
 - Report URLs work without the MCP server: the snapshot lives in the URL fragment, which the browser never sends to the server (RFC 3986 §3.5). A link is roughly 900 bytes.
-- What robovac cannot do: it does not apply settings, does not connect from the web app to any database, does not store snapshots server-side, and does not cover multi-table or cluster-wide tuning in one report.
+- What robovac cannot do: it does not apply settings, does not connect to any database (neither the web app nor the MCP server), does not store snapshots server-side, and does not cover multi-table or cluster-wide tuning in one report.
 
 ## Pages
 
