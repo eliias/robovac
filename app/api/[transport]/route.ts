@@ -9,4 +9,16 @@ const handler = createMcpHandler(
   { basePath: "/api" },
 );
 
-export { handler as GET, handler as POST, handler as DELETE };
+// The middleware rewrites protocol traffic on /mcp to this route, but the
+// request keeps its original URL. The handler checks that URL against
+// /api/mcp, so prefix the path before it looks.
+const normalized = (request: Request) => {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/api/")) {
+    url.pathname = `/api${url.pathname}`;
+    return handler(new Request(url, request));
+  }
+  return handler(request);
+};
+
+export { normalized as GET, normalized as POST, normalized as DELETE };
