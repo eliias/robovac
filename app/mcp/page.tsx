@@ -66,7 +66,7 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
     title: "required grants",
     sig: "pg_monitor",
-    body: "For your agent's own connection: a role in pg_monitor is enough. No table data is read, ever. robovac itself needs nothing — no DATABASE_URL, no env, no connection.",
+    body: "For your agent's own connection: a role in pg_monitor is enough. No table data is read, ever. robovac itself needs nothing: no DATABASE_URL, no env, no connection.",
   },
 ];
 
@@ -96,7 +96,7 @@ export default function McpPage() {
         }}
       >
         robovac is an MCP server with one job: turn a statistics snapshot of one table into a link.
-        It never connects to your database — it hands your agent a read-only{" "}
+        It never connects to your database: it hands your agent a read-only{" "}
         <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span>, the agent runs it twice
         on its own connection, and robovac computes the report from the two result rows. There is no
         account, no stored state, no environment variable, and no write path anywhere.

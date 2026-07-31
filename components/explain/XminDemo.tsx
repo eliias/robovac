@@ -58,7 +58,7 @@ export function XminDemo() {
   if (dm.snapshotXid !== null) {
     hint = `A snapshot is open at xid ${dm.snapshotXid}. Versions deleted after it are held: vacuum cannot remove them, so n_dead_tup keeps rising. This is what a long-running query does to a busy table.`;
   } else if (dead > 0) {
-    hint = `${dead} dead version(s) on disk. VACUUM removes them and the space is reusable by this table — the file does not shrink.`;
+    hint = `${dead} dead version(s) on disk. VACUUM removes them and the space is reusable by this table, the file does not shrink.`;
   } else {
     hint =
       "UPDATE writes a new version and stamps the old row’s xmax. Open a snapshot first to see vacuum blocked.";

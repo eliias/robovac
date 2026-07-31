@@ -89,8 +89,8 @@ export default function ArcanaPage() {
         }}
       >
         Definitions follow PostgreSQL 16 behaviour and note where newer or older versions differ.
-        Every term in the report links here, and every entry links to a page — the tagged ones with
-        a demo you can drag.
+        Every term in the report links here, and every entry links to a page, the tagged ones with a
+        demo you can drag.
       </div>
     </div>
   );

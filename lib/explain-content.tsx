@@ -21,7 +21,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Every row version in a heap carries two hidden system columns: {m("xmin")}, the transaction
         id that created it, and {m("xmax")}, the transaction id that deleted or superseded it.
-        Postgres never overwrites a row in place — an UPDATE writes a new version and stamps the old
+        Postgres never overwrites a row in place: an UPDATE writes a new version and stamps the old
         one&rsquo;s xmax. A transaction sees a version only if its xmin is committed and visible to
         that transaction&rsquo;s snapshot, and its xmax is not. Old versions stay on disk until
         vacuum proves no live snapshot can still need them; that backlog is what {m("n_dead_tup")}{" "}
@@ -38,8 +38,8 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         {m("xmax")} is the second half of every visibility check: the transaction id that deleted or
         superseded a row version. A DELETE stamps it on the current version; an UPDATE stamps it on
-        the old version while writing the new one. It is set and never cleared — the version stays
-        on disk, invisible to new snapshots, until vacuum removes it. A row with an empty xmax is
+        the old version while writing the new one. It is set and never cleared: the version stays on
+        disk, invisible to new snapshots, until vacuum removes it. A row with an empty xmax is
         simply alive.
       </>
     ),
@@ -67,7 +67,7 @@ export const CONTENT: Record<string, ExplainContent> = {
     definition: (
       <>
         The xmin horizon is the oldest snapshot anyone in the cluster still holds. Vacuum may only
-        remove row versions that died before it — everything newer must be kept, because a running
+        remove row versions that died before it. Everything newer must be kept, because a running
         transaction could still read it. Four things pin the horizon: long-running transactions,
         stale or unused replication slots, prepared transactions, and standby feedback. While one of
         them holds it back, no autovacuum setting can remove a single dead row, and{" "}
@@ -77,13 +77,13 @@ export const CONTENT: Record<string, ExplainContent> = {
     Demo: XminDemo,
     seeAlso: ["dead-tuple", "wraparound"],
     footnote:
-      "Open a snapshot in the demo (BEGIN) and vacuum stops removing anything deleted after it — that is the horizon in one page. In production, find the holder in pg_stat_activity, pg_replication_slots, or pg_prepared_xacts before touching any knob.",
+      "Open a snapshot in the demo (BEGIN) and vacuum stops removing anything deleted after it: that is the horizon in one page. In production, find the holder in pg_stat_activity, pg_replication_slots, or pg_prepared_xacts before touching any knob.",
   },
   "hot-update": {
     definition: (
       <>
         A heap-only-tuple (HOT) update writes the new row version on the same page as the old one
-        and touches no index at all — the old version&rsquo;s line pointer redirects to the new one.
+        and touches no index at all: the old version&rsquo;s line pointer redirects to the new one.
         Two conditions, both required: the update changes no indexed column, and the page has free
         space. When either fails, the new version lands on another page and every index on the table
         gets a new entry. On update-heavy tables the HOT rate ({m("n_tup_hot_upd")} vs{" "}
@@ -99,7 +99,7 @@ export const CONTENT: Record<string, ExplainContent> = {
     definition: (
       <>
         {m("fillfactor")} is a table storage parameter: inserts stop filling a page when it is this
-        percent full (default 100). The reserved remainder is not waste — it is the free space that
+        percent full (default 100). The reserved remainder is not waste, it is the free space that
         lets an update stay on the same page, which is the second condition for a HOT update. On
         update-heavy tables a fillfactor of 90 trades 10% larger heap for a much higher HOT rate and
         far fewer index writes. It applies to newly written pages, so changing it needs a rewrite to
@@ -109,7 +109,7 @@ export const CONTENT: Record<string, ExplainContent> = {
     Demo: HotDemo,
     seeAlso: ["hot-update", "bloat"],
     footnote:
-      "Set it per table: ALTER TABLE t SET (fillfactor = 90). Append-only tables should keep 100 — reserving space for updates that never come is pure bloat.",
+      "Set it per table: ALTER TABLE t SET (fillfactor = 90). Append-only tables should keep 100: reserving space for updates that never come is pure bloat.",
   },
   bloat: {
     definition: (
@@ -118,7 +118,7 @@ export const CONTENT: Record<string, ExplainContent> = {
         space from tuples vacuumed long ago that inserts never refilled. Vacuum makes space reusable
         inside the file; it almost never shrinks the file itself, so a table that once bloated stays
         big until a rewrite. The steady-state bloat of a healthy table is roughly the dead rows that
-        accumulate between two vacuum runs — which is why the trigger cadence, not vacuum speed,
+        accumulate between two vacuum runs, which is why the trigger cadence, not vacuum speed,
         decides how fat a table runs.
       </>
     ),
@@ -132,8 +132,8 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         The visibility map is a tiny side file with two bits per heap page: all-visible (every row
         on the page is visible to every snapshot) and all-frozen (every row is frozen). A normal
-        vacuum skips all-visible pages entirely — on a large, mostly-static table that is almost all
-        of them — and index-only scans use the same bit to skip heap fetches. An aggressive vacuum
+        vacuum skips all-visible pages entirely (on a large, mostly-static table that is almost all
+        of them), and index-only scans use the same bit to skip heap fetches. An aggressive vacuum
         trusts only the all-frozen bit.
       </>
     ),
@@ -161,7 +161,7 @@ export const CONTENT: Record<string, ExplainContent> = {
     definition: (
       <>
         The fixed part of the vacuum trigger, default 50 rows. On any real table the scale factor
-        dwarfs it — until you set the factor to 0, at which point the threshold alone decides the
+        dwarfs it, until you set the factor to 0, at which point the threshold alone decides the
         cadence: dead rows arrive at your write rate, and vacuum fires every {m("threshold ÷ rate")}
         . That inversion is the core of cadence-first tuning, and it is why this obscure default
         matters more than it looks.
@@ -177,7 +177,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Since Postgres 13, inserts have their own trigger: {m("autovacuum_vacuum_insert_threshold")}{" "}
         + {m("autovacuum_vacuum_insert_scale_factor")} × {m("n_live_tup")}. Before it, an
-        append-only table produced no dead rows, so nothing ever vacuumed it — until the forced
+        append-only table produced no dead rows, so nothing ever vacuumed it, until the forced
         anti-wraparound scan arrived and read the entire table cold. The insert trigger gets those
         pages vacuumed, frozen, and marked all-visible while they are still in cache.
       </>
@@ -192,8 +192,8 @@ export const CONTENT: Record<string, ExplainContent> = {
         The fixed part of the insert trigger (default 1,000). On append-only tables the recipe
         mirrors the dead-row side: insert scale factor 0 and a threshold sized to about an hour of
         the insert rate. Pair it with a low {m("vacuum_freeze_min_age")} so the insert-triggered
-        vacuums actually freeze what they visit — pages an append-only workload writes once and
-        never touches again.
+        vacuums actually freeze what they visit: pages an append-only workload writes once and never
+        touches again.
       </>
     ),
     seeAlso: ["autovacuum_vacuum_insert_scale_factor", "vacuum_freeze_min_age"],
@@ -212,14 +212,14 @@ export const CONTENT: Record<string, ExplainContent> = {
     ),
     seeAlso: ["autovacuum_analyze_threshold", "autovacuum_vacuum_scale_factor"],
     footnote:
-      "Autovacuum never analyzes a partitioned parent — only the leaves. Schedule a manual ANALYZE on the parent if planner estimates across partitions matter.",
+      "Autovacuum never analyzes a partitioned parent, only the leaves. Schedule a manual ANALYZE on the parent if planner estimates across partitions matter.",
   },
   autovacuum_analyze_threshold: {
     definition: (
       <>
         The fixed part of the analyze trigger, default 50 modified rows. Everything said about{" "}
         {m("autovacuum_vacuum_threshold")} applies: with the scale factor at 0 it sets an absolute
-        cadence in rows, which is what you want on tables whose statistics must not lag — queue
+        cadence in rows, which is what you want on tables whose statistics must not lag: queue
         tables, hot partitions, anything the planner touches on every request.
       </>
     ),
@@ -231,7 +231,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Every {m("autovacuum_naptime")} (default 1 min) the launcher wakes and considers one
         database, so with N databases a given database is visited about every N × naptime. That
-        visit is when trigger formulas are evaluated — which makes naptime the floor on any cadence
+        visit is when trigger formulas are evaluated, which makes naptime the floor on any cadence
         you can configure: a threshold sized to fire every 10 seconds still fires at most once per
         visit.
       </>
@@ -245,7 +245,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         At most {m("autovacuum_max_workers")} tables cluster-wide are vacuumed at once, default 3. A
         multi-hour vacuum of one big table occupies a worker for the whole run, and with three
-        workers, three big tables starve everything else — small hot tables silently miss their
+        workers, three big tables starve everything else, and small hot tables silently miss their
         cadence. The operational rule from production tuning: when workers saturate, raise the
         worker count; never respond by lowering per-table frequency.
       </>
@@ -260,7 +260,7 @@ export const CONTENT: Record<string, ExplainContent> = {
         Vacuum meters itself with a token budget: page touches cost units, and when the running
         balance reaches {m("autovacuum_vacuum_cost_limit")}, the worker sleeps{" "}
         {m("autovacuum_vacuum_cost_delay")} milliseconds. The default fell from 20 ms to 2 ms in
-        Postgres 12 — a 10× speedup — but clusters initialized earlier often still carry 20 ms in
+        Postgres 12 (a 10× speedup), but clusters initialized earlier often still carry 20 ms in
         their config, throttling every vacuum to a crawl on hardware that stopped caring a decade
         ago.
       </>
@@ -268,14 +268,14 @@ export const CONTENT: Record<string, ExplainContent> = {
     Demo: CostDemo,
     seeAlso: ["autovacuum_vacuum_cost_limit", "vacuum_cost_page_dirty"],
     footnote:
-      "0 disables throttling entirely. Manual VACUUM uses vacuum_cost_delay, which defaults to 0 — that is why a hand-run vacuum feels so much faster than autovacuum.",
+      "0 disables throttling entirely. Manual VACUUM uses vacuum_cost_delay, which defaults to 0, that is why a hand-run vacuum feels so much faster than autovacuum.",
   },
   autovacuum_vacuum_cost_limit: {
     definition: (
       <>
         The size of the token budget: cost units the worker may spend before sleeping{" "}
         {m("autovacuum_vacuum_cost_delay")}. Default 200, which with 2 ms delay caps a vacuum at
-        roughly 100,000 units per second — fast for cached pages, slow the moment pages are dirtied.
+        roughly 100,000 units per second: fast for cached pages, slow the moment pages are dirtied.
         All autovacuum workers share this budget between them, so raising worker count without
         raising the limit makes each worker slower. Production values on large tables run 600 to a
         few thousand.
@@ -291,7 +291,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         The price of touching a page already in {m("shared_buffers")}: 1 unit, the baseline of the
         cost model. It exists so even a fully cached vacuum pays something and yields the CPU on
-        schedule. In a warm cache, hits dominate the page count but almost none of the budget — the
+        schedule. In a warm cache, hits dominate the page count but almost none of the budget: the
         dirty pages do.
       </>
     ),
@@ -316,7 +316,7 @@ export const CONTENT: Record<string, ExplainContent> = {
   vacuum_cost_page_dirty: {
     definition: (
       <>
-        The price of dirtying a page — modifying it so it must be written back: 20 units, the
+        The price of dirtying a page (modifying it so it must be written back): 20 units, the
         dominant term of the cost model. This is deliberate: reads are cheap and repeatable, but
         every dirtied page becomes a write plus WAL that the whole replication chain has to absorb.
         A vacuum that removes a lot of dead rows dirties most pages it visits, which is why the
@@ -326,14 +326,14 @@ export const CONTENT: Record<string, ExplainContent> = {
     Demo: CostDemo,
     seeAlso: ["vacuum_cost_page_hit", "vacuum_cost_page_miss"],
     footnote:
-      "Freezing dirties pages too — an aggressive vacuum over a cold table pays this price for nearly every page it freezes.",
+      "Freezing dirties pages too: an aggressive vacuum over a cold table pays this price for nearly every page it freezes.",
   },
   maintenance_work_mem: {
     definition: (
       <>
         The memory a vacuum may use for its dead-TID store, default 64 MB. Before Postgres 17 this
         was the hidden multiplier on vacuum cost: 64 MB held about 11M TIDs, and a table with more
-        dead rows than that forced vacuum to stop, scan every index, and start again — multiple full
+        dead rows than that forced vacuum to stop, scan every index, and start again: multiple full
         index passes per run, capped further by a hard 1 GB limit. Postgres 17 replaced the array
         with an adaptive radix tree: ~20× more TIDs per MB, no 1 GB cap, and almost always a single
         index pass.
@@ -348,7 +348,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Transaction ids are 32-bit and wrap. A row whose {m("xmin")} falls more than 2^31
         transactions behind the current xid would appear to be in the future, so Postgres must mark
-        old rows frozen — permanently visible, their xmin no longer compared — before that happens.
+        old rows frozen (permanently visible, their xmin no longer compared) before that happens.
         Freezing is vacuum&rsquo;s second job, and the quiet one: it happens per page, it dirties
         the page, and its schedule is controlled by three age settings that only make sense
         together.
@@ -364,9 +364,9 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Every table carries {m("relfrozenxid")} in {m("pg_class")}: a promise that no unfrozen row
         older than this xid exists in the table. Vacuum advances it when it can prove the promise
-        for a newer xid, and {m("age(relfrozenxid)")} — how far the promise lags the current xid —
-        is the single number wraparound monitoring watches. The three freeze settings are all
-        expressed against this age.
+        for a newer xid, and {m("age(relfrozenxid)")} (how far the promise lags the current xid) is
+        the single number wraparound monitoring watches. The three freeze settings are all expressed
+        against this age.
       </>
     ),
     Demo: FreezeDemo,
@@ -394,7 +394,7 @@ export const CONTENT: Record<string, ExplainContent> = {
         When a vacuum starts on a table whose {m("age(relfrozenxid)")} exceeds{" "}
         {m("vacuum_freeze_table_age")} (default 150M), that vacuum escalates itself to aggressive:
         it ignores the all-visible map bits and advances {m("relfrozenxid")}. This is the polite
-        escalation — it rides a vacuum that was going to run anyway. Keep it well under{" "}
+        escalation: it rides a vacuum that was going to run anyway. Keep it well under{" "}
         {m("autovacuum_freeze_max_age")}, so aggressive passes happen on your trigger schedule
         rather than as the forced anti-wraparound scan.
       </>
@@ -406,18 +406,17 @@ export const CONTENT: Record<string, ExplainContent> = {
     definition: (
       <>
         An aggressive vacuum is a normal vacuum that refuses shortcuts: it visits every page not
-        marked all-frozen — including all of the all-visible pages a normal pass skips — freezes
-        what qualifies, and advances {m("relfrozenxid")}. It gets triggered by table age, not dead
-        rows: politely at {m("vacuum_freeze_table_age")}, forcibly at{" "}
-        {m("autovacuum_freeze_max_age")}. The forced form runs even with autovacuum off and does not
-        yield to lock waiters, which is how a scheduled DDL statement ends up queueing a whole
-        application behind it.
+        marked all-frozen (including all of the all-visible pages a normal pass skips) freezes what
+        qualifies, and advances {m("relfrozenxid")}. It gets triggered by table age, not dead rows:
+        politely at {m("vacuum_freeze_table_age")}, forcibly at {m("autovacuum_freeze_max_age")}.
+        The forced form runs even with autovacuum off and does not yield to lock waiters, which is
+        how a scheduled DDL statement ends up queueing a whole application behind it.
       </>
     ),
     Demo: FreezeDemo,
     seeAlso: ["vacuum_freeze_table_age", "autovacuum_freeze_max_age", "wraparound"],
     footnote:
-      "Give every scheduled DDL a lock_timeout: the Joyent (2015) and Duffel (2021) outages are the same incident six years apart — DDL queued behind an anti-wraparound vacuum, everything queued behind the DDL.",
+      "Give every scheduled DDL a lock_timeout: the Joyent (2015) and Duffel (2021) outages are the same incident six years apart: DDL queued behind an anti-wraparound vacuum, everything queued behind the DDL.",
   },
   autovacuum_freeze_max_age: {
     definition: (
@@ -440,14 +439,14 @@ export const CONTENT: Record<string, ExplainContent> = {
     Demo: FreezeDemo,
     seeAlso: ["aggressive-vacuum", "vacuum_failsafe_age", "wraparound"],
     footnote:
-      "Raising it above ~400M is only safe while eager freezing keeps age(relfrozenxid) flat — a very high value also delays the day a latent bug detonates, and the blast radius grows with it.",
+      "Raising it above ~400M is only safe while eager freezing keeps age(relfrozenxid) flat. A very high value also delays the day a latent bug detonates, and the blast radius grows with it.",
   },
   wraparound: {
     definition: (
       <>
         With 2^31 usable xids, an unfrozen row can only age so far before comparisons would invert
         and committed data would appear to be from the future. Postgres defends in stages: warnings
-        at 40M xids of headroom, then a hard stop — no new write transactions — at 3M. Recovery is a
+        at 40M xids of headroom, then a hard stop (no new write transactions) at 3M. Recovery is a
         vacuum of the tables holding the oldest {m("relfrozenxid")}, at whatever speed the neglected
         table allows; the public postmortems measure it in hours to days, and two of them ended by
         truncating rebuildable terabyte tables instead.
@@ -463,7 +462,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         The emergency brake, added in Postgres 14. When a table&rsquo;s age crosses{" "}
         {m("vacuum_failsafe_age")} (default 1.6B) during a vacuum, that vacuum abandons everything
-        optional — cost-based throttling off, index cleanup skipped, truncation skipped — and does
+        optional (cost-based throttling off, index cleanup skipped, truncation skipped) and does
         nothing but freeze as fast as the hardware allows. It is the difference between a wraparound
         near-miss and a shutdown; you are not supposed to see it fire, and if you do, the freeze
         settings upstream were wrong.
@@ -471,7 +470,7 @@ export const CONTENT: Record<string, ExplainContent> = {
     ),
     seeAlso: ["autovacuum_freeze_max_age", "wraparound"],
     footnote:
-      "Skipped index cleanup means index bloat to clean up afterwards — the failsafe trades it willingly.",
+      "Skipped index cleanup means index bloat to clean up afterwards, and the failsafe trades it willingly.",
   },
   multixact: {
     definition: (
@@ -479,7 +478,7 @@ export const CONTENT: Record<string, ExplainContent> = {
         When several transactions lock the same row (foreign-key checks, {m("SELECT … FOR SHARE")}),
         the row&rsquo;s {m("xmax")} cannot hold them all, so Postgres allocates a multixact id
         pointing to a member list stored out of line. Multixacts have their own 32-bit counter,
-        their own age, their own freeze settings — and a second, less visible limit: the member
+        their own age, their own freeze settings, and a second, less visible limit: the member
         space, about 4B entries with no built-in metric. Under heavy contention member lists grow
         quadratically, and member exhaustion stops writes while every age metric still looks
         healthy.
@@ -494,7 +493,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         The multixact counterpart of {m("autovacuum_freeze_max_age")}, default 400M: at this
         multixact age a forced aggressive vacuum runs to freeze old multixact references. Vacuum
-        also triggers on member-space usage — once the member area passes half its capacity, the
+        also triggers on member-space usage: once the member area passes half its capacity, the
         effective threshold drops automatically. Tune it with the same caution as the xid version,
         and remember that member space, not age, is the limit that fills silently.
       </>
@@ -508,7 +507,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       <>
         Values too large for a page (beyond ~2 kB after compression) move to the table&rsquo;s TOAST
         relation: a hidden companion table in {m("pg_toast")}, chunked and indexed. It has its own
-        statistics and its own autovacuum state, and it does not inherit the parent&rsquo;s tuning —
+        statistics and its own autovacuum state, and it does not inherit the parent&rsquo;s tuning:
         a JSONB-heavy table can keep a tidy heap while its TOAST relation bloats or burns through
         xids unnoticed. You cannot ALTER the toast table directly; set {m("toast.autovacuum_*")}{" "}
         parameters on the parent.
@@ -524,13 +523,13 @@ export const CONTENT: Record<string, ExplainContent> = {
         Vacuum makes space reusable; it does not give pages back. {m("pg_repack")} does: it rebuilds
         a table (or index) online by copying live rows to a new file while capturing concurrent
         changes with triggers, then swaps the files, holding only brief exclusive locks at the start
-        and end. The costs are real — double the disk during the rebuild, the full table written
-        through WAL, and a reindex of everything — but it is the standard answer once bloat is
+        and end. The costs are real (double the disk during the rebuild, the full table written
+        through WAL, and a reindex of everything), but it is the standard answer once bloat is
         already in the file.
       </>
     ),
     seeAlso: ["bloat", "fillfactor"],
     footnote:
-      "Alternatives: VACUUM FULL (simple, but an exclusive lock for the whole rewrite) and pg_squeeze (logical-replication based, no triggers). Table storage parameters can be lost on rebuild tooling — re-apply reloptions afterwards.",
+      "Alternatives: VACUUM FULL (simple, but an exclusive lock for the whole rewrite) and pg_squeeze (logical-replication based, no triggers). Table storage parameters can be lost on rebuild tooling: re-apply reloptions afterwards.",
   },
 };
