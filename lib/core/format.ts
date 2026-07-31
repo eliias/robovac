@@ -25,11 +25,20 @@ export function fmtDur(days: number): string {
 }
 
 /**
- * A vacuum interval derived from a measured rate. A single-sample snapshot has
- * no rate (deadPerDay 0 → Infinity here): say so instead of inventing one.
+ * A vacuum interval derived from a rate. When the rate is zero (days →
+ * Infinity here) the caller says why: a single sample has no rate, a
+ * measured interval without writes has a rate of zero.
  */
-export function fmtPeriod(days: number): string {
-  return Number.isFinite(days) && days > 0 ? fmtDur(days) : "unknown · one sample";
+export function fmtPeriod(days: number, zeroLabel = "unknown · one sample"): string {
+  return Number.isFinite(days) && days > 0 ? fmtDur(days) : zeroLabel;
+}
+
+/**
+ * The phrase after "vacuum": "every 3.2 d", or the zero-rate reason.
+ * zeroReason must fit the same frame, e.g. "never · no writes observed".
+ */
+export function fmtCadence(days: number, zeroReason: string): string {
+  return Number.isFinite(days) && days > 0 ? `every ${fmtDur(days)}` : zeroReason;
 }
 
 export function fmtSecs(s: number): string {

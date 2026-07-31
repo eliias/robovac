@@ -1,8 +1,14 @@
-import { fmtCompact, fmtDur } from "../../../lib/core/format";
+import { fmtCompact, fmtDur, fmtSecs } from "../../../lib/core/format";
 import { threshold } from "../../../lib/core/model";
 import { optimize } from "../../../lib/core/optimize";
 import { SETTINGS, defaultValues, type Values } from "../../../lib/core/settings";
-import { SnapshotSchema, type Hints, type Snapshot } from "../../../lib/core/snapshot";
+import {
+  MIN_SAMPLE_SECONDS,
+  SnapshotSchema,
+  hasMeasuredRate,
+  type Hints,
+  type Snapshot,
+} from "../../../lib/core/snapshot";
 
 export type Row = Record<string, unknown>;
 
@@ -107,9 +113,10 @@ export function buildSnapshot(first: Row, second: Row, hints?: Hints): Snapshot 
     versionNum: num(second, "version_num"),
     isPartition: Boolean(second.is_partition),
     hasToast: Boolean(second.has_toast),
-    rateConfidence: (dtSeconds >= 30 && deadDeltaRows + insDeltaRows >= 50 ? "high" : "low") as
-      | "high"
-      | "low",
+    rateConfidence: (dtSeconds >= MIN_SAMPLE_SECONDS && deadDeltaRows + insDeltaRows >= 50
+      ? "high"
+      : "low") as "high" | "low",
+    sampleSeconds: Math.round(dtSeconds),
     hints,
   };
   const proposal = optimize(stats);
@@ -118,13 +125,25 @@ export function buildSnapshot(first: Row, second: Row, hints?: Hints): Snapshot 
 
 export function verdict(snap: Snapshot): string {
   const thr = threshold(snap.current, snap.live);
-  const period = snap.deadPerDay > 0 ? fmtDur(thr / snap.deadPerDay) : "∞";
   const aggressive = snap.xidAge > snap.current.autovacuum_freeze_max_age;
+  const tail = aggressive
+    ? ", and relfrozenxid age is past autovacuum_freeze_max_age, so every run is aggressive."
+    : ".";
+  if (snap.deadPerDay > 0) {
+    return (
+      `Autovacuum fires every ${fmtDur(thr / snap.deadPerDay)} at the observed write rate. ` +
+      `The table reaches ${fmtCompact(thr)} dead tuples before each run${tail}`
+    );
+  }
+  if (hasMeasuredRate(snap)) {
+    return (
+      `No writes landed in the ${fmtSecs(snap.sampleSeconds ?? 0)} between the two samples, ` +
+      `so autovacuum never fires on dead tuples at this rate. ` +
+      `The trigger sits at ${fmtCompact(thr)} dead tuples${tail}`
+    );
+  }
   return (
-    `Autovacuum fires every ${period} at the observed write rate. ` +
-    `The table reaches ${fmtCompact(thr)} dead tuples before each run` +
-    (aggressive
-      ? ", and relfrozenxid age is past autovacuum_freeze_max_age, so every run is aggressive."
-      : ".")
+    `Autovacuum fires every ∞ at the observed write rate. ` +
+    `The table reaches ${fmtCompact(thr)} dead tuples before each run${tail}`
   );
 }

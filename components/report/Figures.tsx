@@ -11,7 +11,7 @@ import {
   threshold,
 } from "@/lib/core/model";
 import type { Values } from "@/lib/core/settings";
-import type { Snapshot } from "@/lib/core/snapshot";
+import { hasMeasuredRate, type Snapshot } from "@/lib/core/snapshot";
 
 const DANGER_START = 1600000000;
 
@@ -54,6 +54,7 @@ function TwoCellStrip({ cells }: { cells: { label: string; value: string; color?
 export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values }) {
   const thrCur = threshold(snap.current, snap.live);
   const thrLive = threshold(values, snap.live);
+  const zeroPeriod = hasMeasuredRate(snap) ? "no writes" : "unknown · one sample";
   const yMax = Math.max(thrCur, thrLive);
   const W = 496;
   const H = 172;
@@ -119,11 +120,11 @@ export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values
           cells={[
             {
               label: "CURRENT · dashed",
-              value: `${fmtPeriod(thrCur / snap.deadPerDay)} · ${fmtCompact(thrCur)} peak`,
+              value: `${fmtPeriod(thrCur / snap.deadPerDay, zeroPeriod)} · ${fmtCompact(thrCur)} peak`,
             },
             {
               label: "SLIDERS · solid",
-              value: `${fmtPeriod(thrLive / snap.deadPerDay)} · ${fmtCompact(thrLive)} peak`,
+              value: `${fmtPeriod(thrLive / snap.deadPerDay, zeroPeriod)} · ${fmtCompact(thrLive)} peak`,
               color: "#fff",
             },
           ]}

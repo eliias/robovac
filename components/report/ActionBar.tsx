@@ -1,7 +1,7 @@
 "use client";
 
 import { C, MONO, primaryButton, secondaryButton } from "@/components/ui";
-import { fmtPeriod } from "@/lib/core/format";
+import { fmtCadence } from "@/lib/core/format";
 
 /**
  * Mobile only: exactly two actions, always reachable. Everything else (resets,
@@ -10,12 +10,15 @@ import { fmtPeriod } from "@/lib/core/format";
 export function ActionBar({
   pending,
   periodDays,
+  zeroCadence,
   copied,
   onOptimize,
   onCopy,
 }: {
   pending: number;
   periodDays: number;
+  /** The phrase after "vacuum" when the rate is zero. */
+  zeroCadence: string;
   copied: boolean;
   onOptimize: () => void;
   onCopy: () => void;
@@ -49,7 +52,7 @@ export function ActionBar({
         }}
       >
         <div style={{ color: pending > 0 ? C.warn : C.dim }}>{pending} proposed pending</div>
-        <div>vacuum every {fmtPeriod(periodDays)}</div>
+        <div>vacuum {fmtCadence(periodDays, zeroCadence)}</div>
       </div>
       <button
         className="btn-secondary"

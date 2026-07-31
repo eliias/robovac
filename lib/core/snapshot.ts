@@ -37,7 +37,20 @@ export interface Snapshot {
   isPartition?: boolean;
   hasToast?: boolean;
   rateConfidence?: "high" | "low";
+  /** Seconds between the two statistics reads. Absent on older links. */
+  sampleSeconds?: number;
   hints?: Hints;
+}
+
+/** Below this interval a zero delta reads as "single sample", not "no writes". */
+export const MIN_SAMPLE_SECONDS = 30;
+
+/**
+ * True when the two statistics reads span a real interval, so a zero delta
+ * is a measured zero write rate, not a missing rate.
+ */
+export function hasMeasuredRate(snap: Snapshot): boolean {
+  return (snap.sampleSeconds ?? 0) >= MIN_SAMPLE_SECONDS;
 }
 
 const valuesSchema = (rangeOf: (d: SettingDef) => readonly [number, number]) =>
@@ -85,6 +98,7 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
     isPartition: z.boolean().optional(),
     hasToast: z.boolean().optional(),
     rateConfidence: z.enum(["high", "low"]).optional(),
+    sampleSeconds: z.number().positive().optional(),
     hints: z
       .object({
         pattern: z

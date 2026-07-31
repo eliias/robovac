@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSnapshot, type Row } from "./report";
+import { buildSnapshot, verdict, type Row } from "./report";
 
 // Rows as a generic SQL tool would return them: numbers as strings, arrays as
 // text, jsonb as an object.
@@ -66,6 +66,25 @@ describe("buildSnapshot", () => {
   it("marks short samples as low confidence", () => {
     const second = row({ captured_at: "2026-07-30T12:00:05+00:00" });
     expect(buildSnapshot(row(), second).rateConfidence).toBe("low");
+  });
+
+  it("records the interval between the two samples", () => {
+    const second = row({ captured_at: "2026-07-30T12:00:40+00:00" });
+    // Identical counters over a real interval: the rate is a measured zero,
+    // not an unknown. The interval is what lets the UI tell them apart.
+    const snap = buildSnapshot(row(), second);
+    expect(snap.sampleSeconds).toBe(40);
+    expect(snap.deadPerDay).toBe(0);
+  });
+
+  it("gives a duplicated row a one-second interval", () => {
+    const only = row();
+    expect(buildSnapshot(only, only).sampleSeconds).toBe(1);
+  });
+
+  it("says no writes, not one sample, for a measured zero rate", () => {
+    const second = row({ captured_at: "2026-07-30T12:00:40+00:00" });
+    expect(verdict(buildSnapshot(row(), second))).toMatch(/No writes landed in the 40 s/);
   });
 
   it("fails with a clear error when a column is missing", () => {
