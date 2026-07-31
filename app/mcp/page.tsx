@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { social } from "@/lib/social";
 import {
   C,
   MONO,
@@ -16,8 +17,12 @@ export const metadata: Metadata = {
   description:
     "Install the robovac MCP server: statistics snapshot in, report link and optimized autovacuum settings out. Read-only, no account.",
   alternates: { canonical: "/mcp" },
-  openGraph: { title: "Add robovac to your agent" },
-  twitter: { title: "Add robovac to your agent" },
+  ...social({
+    title: "Add robovac to your agent",
+    description:
+      "Install the robovac MCP server: statistics snapshot in, report link and optimized autovacuum settings out. Read-only, no account.",
+    path: "/mcp",
+  }),
 };
 
 const CONFIG = `# Claude Code

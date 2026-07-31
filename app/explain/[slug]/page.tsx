@@ -6,6 +6,7 @@ import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
 import { CONTENT } from "@/lib/explain-content";
 import { TERMS } from "@/lib/terms";
 import { requestOrigin } from "@/lib/origin";
+import { social } from "@/lib/social";
 
 export function generateStaticParams() {
   return TERMS.filter((t) => t.built).map((t) => ({ slug: t.slug }));
@@ -21,29 +22,17 @@ export async function generateMetadata({
   const { slug } = await params;
   const term = TERMS.find((t) => t.slug === slug && t.built);
   if (!term) return { title: `robovac · ${slug}` };
-  const card = {
-    url: `/brand/og/explain-${slug}.png`,
-    type: "image/png",
-    width: 1200,
-    height: 630,
-    alt: `robovac: ${term.term}`,
-  };
   return {
     title: `${term.term} — robovac`,
     description: term.blurb,
     alternates: { canonical: `/explain/${slug}` },
-    openGraph: {
+    ...social({
+      title: term.term,
+      description: term.blurb,
+      path: `/explain/${slug}`,
       type: "article",
-      title: term.term,
-      description: term.blurb,
-      images: [card],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: term.term,
-      description: term.blurb,
-      images: [{ url: card.url, alt: card.alt }],
-    },
+      image: { url: `/brand/og/explain-${slug}.png`, alt: `robovac: ${term.term}` },
+    }),
   };
 }
 

@@ -2,14 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { C, MONO, SANS } from "@/components/ui";
 import { TERMS, termHref } from "@/lib/terms";
+import { social } from "@/lib/social";
 
 export const metadata: Metadata = {
   title: "Arcana — everything vacuum-adjacent worth knowing",
   description:
     "Everything vacuum-adjacent that is worth knowing, in the order it tends to hurt you. Every term links to a place in the product where you can watch it happen.",
   alternates: { canonical: "/arcana" },
-  openGraph: { title: "Arcana — everything vacuum-adjacent worth knowing" },
-  twitter: { title: "Arcana — everything vacuum-adjacent worth knowing" },
+  ...social({
+    title: "Arcana — everything vacuum-adjacent worth knowing",
+    description:
+      "Everything vacuum-adjacent that is worth knowing, in the order it tends to hurt you. Every term links to a place in the product where you can watch it happen.",
+    path: "/arcana",
+  }),
 };
 
 export default function ArcanaPage() {

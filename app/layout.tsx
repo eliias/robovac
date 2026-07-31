@@ -40,6 +40,7 @@ const baseMetadata: Metadata = {
     type: "website",
     siteName: "robovac",
     locale: "en_US",
+    url: "/",
     title: "Postgres vacuum settings, explained and tuned",
     description: "One table, one link, no account.",
     images: [
