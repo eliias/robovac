@@ -21,6 +21,12 @@ function num(row: Row, column: string): number {
   return n;
 }
 
+/** Like num, but absent columns are fine: older snapshot SQL lacks them. */
+function optNum(row: Row, column: string): number | undefined {
+  if (row[column] === undefined || row[column] === null) return undefined;
+  return num(row, column);
+}
+
 function text(row: Row, column: string): string | null {
   const v = row[column];
   return v === null || v === undefined ? null : String(v);
@@ -117,6 +123,7 @@ export function buildSnapshot(first: Row, second: Row, hints?: Hints): Snapshot 
       ? "high"
       : "low") as "high" | "low",
     sampleSeconds: Math.round(dtSeconds),
+    allVisiblePages: optNum(second, "relallvisible"),
     hints,
   };
   const proposal = optimize(stats);

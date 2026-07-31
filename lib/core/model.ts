@@ -12,6 +12,23 @@ export interface RunCost {
   costUnits: number;
 }
 
+/**
+ * Pages of work in one vacuum pass. Vacuum skips heap pages the visibility
+ * map marks all-visible; each index adds a fixed 30% of the heap on top.
+ * Both are stated assumptions, like the page mix in runCost, not
+ * measurements. Old snapshots without relallvisible price the full heap.
+ */
+export const INDEX_HEAP_FRACTION = 0.3;
+
+export function passPages(
+  pages: number,
+  allVisiblePages?: number,
+  indexes?: number | null,
+): number {
+  const heap = Math.max(1, pages - (allVisiblePages ?? 0));
+  return heap + INDEX_HEAP_FRACTION * (indexes ?? 0) * pages;
+}
+
 export function runCost(values: Values, pages: number): RunCost {
   const costUnits =
     pages *

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { WRAP, daysToAggressive, runCost, sawPath, shutdownMarginDays, threshold } from "./model";
+import {
+  WRAP,
+  daysToAggressive,
+  passPages,
+  runCost,
+  sawPath,
+  shutdownMarginDays,
+  threshold,
+} from "./model";
 import { DEMO_SNAPSHOT } from "./fixtures";
 
 const snap = DEMO_SNAPSHOT;
@@ -12,6 +20,24 @@ describe("threshold", () => {
   it("gives a 22.7 day period for the demo current settings", () => {
     const days = threshold(snap.current, snap.live) / snap.deadPerDay;
     expect(days).toBeCloseTo(22.67, 1);
+  });
+});
+
+describe("passPages", () => {
+  it("skips all-visible pages on the heap side", () => {
+    expect(passPages(1000, 900, 0)).toBe(100);
+  });
+
+  it("adds 30% of the heap per index", () => {
+    expect(passPages(1000, undefined, 3)).toBe(1000 + 0.3 * 3 * 1000);
+  });
+
+  it("floors the heap side at one page", () => {
+    expect(passPages(1000, 1200, 0)).toBe(1);
+  });
+
+  it("treats null indexes as zero", () => {
+    expect(passPages(1000, undefined, null)).toBe(1000);
   });
 });
 

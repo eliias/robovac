@@ -82,6 +82,13 @@ describe("buildSnapshot", () => {
     expect(buildSnapshot(only, only).sampleSeconds).toBe(1);
   });
 
+  it("reads relallvisible when present and tolerates its absence", () => {
+    const second = row({ captured_at: "2026-07-30T12:01:00+00:00", relallvisible: "95000" });
+    expect(buildSnapshot(row(), second).allVisiblePages).toBe(95000);
+    const old = row({ captured_at: "2026-07-30T12:01:00+00:00" });
+    expect(buildSnapshot(row(), old).allVisiblePages).toBeUndefined();
+  });
+
   it("says no writes, not one sample, for a measured zero rate", () => {
     const second = row({ captured_at: "2026-07-30T12:00:40+00:00" });
     expect(verdict(buildSnapshot(row(), second))).toMatch(/No writes landed in the 40 s/);

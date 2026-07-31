@@ -7,7 +7,7 @@ import { useViewport } from "@/components/useViewport";
 import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
 import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
 import { fmtCadence, fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
-import { runCost, threshold } from "@/lib/core/model";
+import { passPages, runCost, threshold } from "@/lib/core/model";
 import { optimize } from "@/lib/core/optimize";
 import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
 import { hasMeasuredRate, type Snapshot } from "@/lib/core/snapshot";
@@ -107,8 +107,8 @@ export function ReportView() {
       thrLive,
       periodCur: thrCur / snap.deadPerDay,
       periodLive: thrLive / snap.deadPerDay,
-      costCur: runCost(snap.current, snap.pages),
-      costLive: runCost(values, snap.pages),
+      costCur: runCost(snap.current, passPages(snap.pages, snap.allVisiblePages, snap.indexes)),
+      costLive: runCost(values, passPages(snap.pages, snap.allVisiblePages, snap.indexes)),
       aggressiveNow: snap.xidAge > snap.current.autovacuum_freeze_max_age,
       bytesPerRow: (snap.pages * 8192) / Math.max(1, snap.live),
       analysis: optimize(snap),
@@ -636,7 +636,7 @@ export function ReportView() {
             : measured
               ? `Two statistics reads, ${fmtSecs(snap.sampleSeconds!)} apart, with identical counters: the write rate is a measured zero, not an unknown.`
               : `Single sample: no rate can be derived from one statistics read. Every figure that needs a rate says "unknown" instead of assuming one.`,
-          `Duration model: cost = pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. The page mix (55% hit, 25% miss, 20% dirty) is a fixed assumption, not measured. Real runs vary with shared_buffers pressure${snap.indexes !== null ? ` and index count (${snap.indexes} indexes on this table)` : ""}.`,
+          `Duration model: cost = work pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Work pages = heap pages not marked all-visible${snap.allVisiblePages === undefined ? " (relallvisible not in this snapshot, full heap priced)" : ""}${snap.indexes ? `, plus 30% of the heap for each of the ${snap.indexes} indexes` : ""}. The page mix and the 30% are fixed assumptions, not measurements. Real runs vary with shared_buffers pressure.`,
           "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
           "Snapshot is a point-in-time read encoded in this URL. Nothing is stored server-side, and nothing here has been applied to your database.",
         ].map((text, i) => (

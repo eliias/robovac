@@ -25,6 +25,7 @@ SELECT
   s.schemaname                                                AS schema_name,
   s.relname                                                   AS table_name,
   c.relpages::bigint                                          AS relpages,
+  c.relallvisible::bigint                                     AS relallvisible,
   s.n_live_tup                                                AS n_live_tup,
   s.n_dead_tup                                                AS n_dead_tup,
   s.n_tup_ins                                                 AS n_tup_ins,

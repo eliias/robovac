@@ -5,6 +5,7 @@ import { fmtCompact, fmtDur, fmtInt, fmtPeriod, fmtSecs } from "@/lib/core/forma
 import {
   WRAP,
   daysToAggressive,
+  passPages,
   runCost,
   sawPath,
   shutdownMarginDays,
@@ -263,8 +264,9 @@ export function FigFreezeHorizon({ snap, values }: { snap: Snapshot; values: Val
 }
 
 export function FigIoCost({ snap, values }: { snap: Snapshot; values: Values }) {
-  const cur = runCost(snap.current, snap.pages);
-  const live = runCost(values, snap.pages);
+  const workPages = passPages(snap.pages, snap.allVisiblePages, snap.indexes);
+  const cur = runCost(snap.current, workPages);
+  const live = runCost(values, workPages);
   const maxSec = Math.max(cur.seconds, live.seconds);
   return (
     <div style={panel}>

@@ -1,4 +1,4 @@
-import { daysToAggressive, runCost, shutdownMarginDays, threshold } from "./model";
+import { daysToAggressive, passPages, runCost, shutdownMarginDays, threshold } from "./model";
 import { SETTINGS, type Values } from "./settings";
 import type { PatternName, Snapshot } from "./snapshot";
 
@@ -275,7 +275,11 @@ function solve(
   values.vacuum_cost_page_dirty = 20;
   let budget: keyof typeof LAG_BUDGET_MBPS = snap.hints?.replicationLagBudget ?? "tight";
   if (cls.emergency) budget = budget === "tight" ? "relaxed" : "none";
-  const budgetCap = LAG_BUDGET_MBPS[budget];
+  const workPages = passPages(snap.pages, snap.allVisiblePages, snap.indexes);
+  const passMB = (workPages * 8192) / 1048576;
+  // A pass under 1 GB is too short to lag a replica; the throttle only costs.
+  const smallPass = passMB < 1024;
+  const budgetCap = smallPass ? Infinity : LAG_BUDGET_MBPS[budget];
   const durationTarget = Math.min(
     (Number.isFinite(cadenceDays) ? cadenceDays : 1) * DAY_SECONDS * 0.5,
     4 * 3600,
@@ -283,7 +287,7 @@ function solve(
   let chosen: number | null = null;
   let bestUnderBudget: number | null = null;
   for (const limit of COST_LIMIT_STEPS) {
-    const c = runCost({ ...values, autovacuum_vacuum_cost_limit: limit }, snap.pages);
+    const c = runCost({ ...values, autovacuum_vacuum_cost_limit: limit }, workPages);
     if (c.mbps <= budgetCap) bestUnderBudget = limit;
     if (c.seconds <= durationTarget && c.mbps <= budgetCap) {
       chosen = limit;
@@ -293,9 +297,8 @@ function solve(
   if (chosen === null && bestUnderBudget === null && budgetCap !== Infinity) {
     // Even the smallest limit bursts past the lag budget at 2 ms: the delay is the knob that meters it.
     chosen = COST_LIMIT_STEPS[0];
-    const c = runCost({ ...values, autovacuum_vacuum_cost_limit: chosen }, snap.pages);
-    const mbTotal = (snap.pages * 8192) / 1048576;
-    const delayNeeded = Math.ceil(((mbTotal / budgetCap) * 1000) / (c.costUnits / chosen));
+    const c = runCost({ ...values, autovacuum_vacuum_cost_limit: chosen }, workPages);
+    const delayNeeded = Math.ceil(((passMB / budgetCap) * 1000) / (c.costUnits / chosen));
     values.autovacuum_vacuum_cost_delay = clampToDef(
       "autovacuum_vacuum_cost_delay",
       clamp(delayNeeded, 2, 20),
@@ -305,8 +308,10 @@ function solve(
     chosen = bestUnderBudget ?? COST_LIMIT_STEPS[0];
   }
   values.autovacuum_vacuum_cost_limit = clampToDef("autovacuum_vacuum_cost_limit", chosen);
-  reasons.autovacuum_vacuum_cost_limit = `Smallest budget that finishes a pass inside the cadence under the ${budget} replication-lag budget.`;
-  const finalCost = runCost(values, snap.pages);
+  reasons.autovacuum_vacuum_cost_limit = smallPass
+    ? `Smallest budget that finishes a pass inside the cadence; a ${Math.round(passMB)} MB pass is too short to lag a replica, so the ${budget} lag budget does not apply.`
+    : `Smallest budget that finishes a pass inside the cadence under the ${budget} replication-lag budget.`;
+  const finalCost = runCost(values, workPages);
   if (finalCost.seconds > durationTarget) {
     warnings.push(
       `A full pass needs ${Math.round(finalCost.seconds / 60)} min inside the ${budget} replication budget; the cadence target is not reachable without relaxing the budget.`,
@@ -372,8 +377,9 @@ function prove(
   }
 
   // Gate 2: pass duration must not rise unless peak bloat falls.
-  const costCur = runCost(cur, snap.pages);
-  const costNew = runCost(values, snap.pages);
+  const workPages = passPages(snap.pages, snap.allVisiblePages, snap.indexes);
+  const costCur = runCost(cur, workPages);
+  const costNew = runCost(values, workPages);
   if (costNew.seconds > costCur.seconds && threshold(values, snap.live) >= thrCur) {
     for (const key of [
       "autovacuum_vacuum_cost_delay",
@@ -427,14 +433,14 @@ function prove(
       (rates.deadPerDay / Math.max(1, thr)) * cost.seconds;
     const curLoad = perDay(thrCur, costCur);
     const cap = Math.max(4 * curLoad, 6 * 3600);
-    let newLoad = perDay(threshold(values, snap.live), runCost(values, snap.pages));
+    let newLoad = perDay(threshold(values, snap.live), runCost(values, workPages));
     let guard = 0;
     while (newLoad > cap && guard < 12) {
       values.autovacuum_vacuum_threshold = clampToDef(
         "autovacuum_vacuum_threshold",
         values.autovacuum_vacuum_threshold * 2,
       );
-      newLoad = perDay(threshold(values, snap.live), runCost(values, snap.pages));
+      newLoad = perDay(threshold(values, snap.live), runCost(values, workPages));
       guard++;
     }
     if (guard > 0) {

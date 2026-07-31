@@ -39,6 +39,8 @@ export interface Snapshot {
   rateConfidence?: "high" | "low";
   /** Seconds between the two statistics reads. Absent on older links. */
   sampleSeconds?: number;
+  /** pg_class.relallvisible: heap pages a vacuum pass skips. Absent on older links. */
+  allVisiblePages?: number;
   hints?: Hints;
 }
 
@@ -99,6 +101,7 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
     hasToast: z.boolean().optional(),
     rateConfidence: z.enum(["high", "low"]).optional(),
     sampleSeconds: z.number().positive().optional(),
+    allVisiblePages: z.number().nonnegative().optional(),
     hints: z
       .object({
         pattern: z

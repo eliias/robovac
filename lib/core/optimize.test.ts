@@ -197,6 +197,37 @@ describe("freeze chain", () => {
 });
 
 describe("cost budget", () => {
+  it("skips the lag throttle when a pass is under 1 GB", () => {
+    // 200 MB queue table: a pass this small cannot lag a replica, so the
+    // tight budget must not stretch it with a raised cost delay.
+    const r = optimize(
+      stats({
+        live: 100_000,
+        dead: 50_000,
+        pages: 25_600,
+        deadPerDay: 2_000_000,
+        insPerDay: 2_000_000,
+        modPerDay: 4_000_000,
+      }),
+    );
+    expect(r.values.autovacuum_vacuum_cost_delay).toBe(2);
+  });
+
+  it("shrinks the pass by the all-visible fraction, clearing the overload warning", () => {
+    const huge = {
+      live: 2_000_000_000,
+      dead: 50_000_000,
+      pages: 262_144_000,
+      deadPerDay: 20_000_000,
+      insPerDay: 5_000_000,
+      modPerDay: 25_000_000,
+    };
+    const cold = optimize(stats({ ...huge, allVisiblePages: 254_000_000, indexes: 0 }));
+    expect(cold.warnings.join(" ")).not.toMatch(/cannot keep up|not reachable/);
+    const hot = optimize(stats(huge));
+    expect(hot.warnings.join(" ")).toMatch(/cannot keep up|not reachable/);
+  });
+
   it("meters the pass with delay when even the smallest limit bursts past a tight budget", () => {
     const r = optimize(
       stats({
