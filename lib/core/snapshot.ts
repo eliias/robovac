@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SETTINGS, type Values } from "./settings";
+import { PG_RANGE, SETTINGS, type SettingDef, type Values } from "./settings";
 
 export type PatternName = "append-only" | "queue" | "large-update-heavy" | "mixed-oltp" | "cold";
 
@@ -40,19 +40,26 @@ export interface Snapshot {
   hints?: Hints;
 }
 
-const valuesSchema = z.record(z.string(), z.number()).superRefine((vals, ctx) => {
-  for (const d of SETTINGS) {
-    const v = vals[d.key];
-    if (v === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `missing setting ${d.key}` });
-    } else if ((v < d.min && !(v === 0 && d.zeroOk)) || v > d.max) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `${d.key} = ${v} outside [${d.min}, ${d.max}]`,
-      });
+const valuesSchema = (rangeOf: (d: SettingDef) => readonly [number, number]) =>
+  z.record(z.string(), z.number()).superRefine((vals, ctx) => {
+    for (const d of SETTINGS) {
+      const v = vals[d.key];
+      const [min, max] = rangeOf(d);
+      if (v === undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `missing setting ${d.key}` });
+      } else if ((v < min && !(v === 0 && d.zeroOk)) || v > max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${d.key} = ${v} outside [${min}, ${max}]`,
+        });
+      }
     }
-  }
-});
+  });
+
+// current holds what the database reports, so anything Postgres accepts is
+// valid. proposed comes from the tuner and stays inside the tuning range.
+const currentSchema = valuesSchema((d) => PG_RANGE[d.key]);
+const proposedSchema = valuesSchema((d) => [d.min, d.max]);
 
 export const SnapshotSchema: z.ZodType<Snapshot> = z
   .object({
@@ -68,8 +75,8 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
     xidPerDay: z.number().positive(),
     lastAutovacuum: z.string().nullable(),
     indexes: z.number().int().nonnegative().nullable(),
-    current: valuesSchema,
-    proposed: valuesSchema,
+    current: currentSchema,
+    proposed: proposedSchema,
     insPerDay: z.number().nonnegative().optional(),
     modPerDay: z.number().nonnegative().optional(),
     hotFraction: z.number().min(0).max(1).optional(),

@@ -188,6 +188,28 @@ export const SETTINGS: SettingDef[] = [
   },
 ];
 
+// The range Postgres itself accepts for each setting (the union of the GUC
+// range and the per-table reloption range). The min/max in SETTINGS is the
+// narrower range the tuner explores; a database in the wild can hold any
+// value in this one.
+export const PG_RANGE: Record<string, readonly [number, number]> = {
+  autovacuum_vacuum_scale_factor: [0, 100],
+  autovacuum_vacuum_threshold: [0, 2147483647],
+  autovacuum_vacuum_insert_scale_factor: [0, 100],
+  autovacuum_vacuum_insert_threshold: [-1, 2147483647],
+  autovacuum_analyze_scale_factor: [0, 100],
+  autovacuum_analyze_threshold: [0, 2147483647],
+  autovacuum_vacuum_cost_delay: [-1, 100],
+  autovacuum_vacuum_cost_limit: [-1, 10000],
+  vacuum_cost_page_hit: [0, 10000],
+  vacuum_cost_page_miss: [0, 10000],
+  vacuum_cost_page_dirty: [0, 10000],
+  vacuum_freeze_min_age: [0, 1000000000],
+  vacuum_freeze_table_age: [0, 2000000000],
+  autovacuum_freeze_max_age: [100000, 2000000000],
+  autovacuum_multixact_freeze_max_age: [10000, 2000000000],
+};
+
 export type Values = Record<string, number>;
 
 export function defaultValues(): Values {

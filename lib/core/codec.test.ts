@@ -45,6 +45,32 @@ describe("codec", () => {
     expect(() => decodeReport(encodeReport(payload))).toThrow(/outside/);
   });
 
+  it("accepts current values outside the tuning range but legal in Postgres", () => {
+    // Seen in the wild: a per-table autovacuum_freeze_max_age of 4M.
+    // Postgres accepts 100k and up; the tuning slider starts at 100M.
+    const snap = {
+      ...DEMO_SNAPSHOT,
+      current: { ...DEMO_SNAPSHOT.current, autovacuum_freeze_max_age: 4000000 },
+    };
+    expect(decodeReport(encodeReport({ snap }))).toEqual({ snap });
+  });
+
+  it("rejects current values Postgres does not accept", () => {
+    const snap = {
+      ...DEMO_SNAPSHOT,
+      current: { ...DEMO_SNAPSHOT.current, autovacuum_freeze_max_age: 50000 },
+    };
+    expect(() => decodeReport(encodeReport({ snap }))).toThrow(/outside/);
+  });
+
+  it("rejects proposed values outside the tuning range", () => {
+    const snap = {
+      ...DEMO_SNAPSHOT,
+      proposed: { ...DEMO_SNAPSHOT.proposed, autovacuum_freeze_max_age: 4000000 },
+    };
+    expect(() => decodeReport(encodeReport({ snap }))).toThrow(/outside/);
+  });
+
   it("round-trips randomly perturbed snapshots", () => {
     let seed = 42;
     const rand = () => {
