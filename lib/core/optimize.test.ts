@@ -151,6 +151,37 @@ describe("freeze chain", () => {
     expect(r.values.autovacuum_freeze_max_age).toBeGreaterThan(400_000_000);
   });
 
+  it("keeps the freeze chain ordered after all gates (the 4M-reloption table)", () => {
+    // Shipped wrong once: low-confidence damping pulled freeze_max down
+    // after table_age was derived, so table_age (200M) > freeze_max (100M).
+    const r = optimize(
+      stats({
+        live: 1_177_625,
+        dead: 3_954,
+        pages: 30_372,
+        deadPerDay: 0,
+        insPerDay: 0,
+        xidAge: 25_229,
+        xidPerDay: 1_000,
+        rateConfidence: "low",
+        current: { ...defaultValues(), autovacuum_freeze_max_age: 4_000_000 },
+      }),
+    );
+    expect(r.values.vacuum_freeze_table_age).toBeLessThanOrEqual(
+      0.75 * r.values.autovacuum_freeze_max_age,
+    );
+  });
+
+  it("derives table_age as exactly 75% of freeze_max, not rounded up to 100%", () => {
+    const r = optimize(stats({}));
+    expect(r.values.vacuum_freeze_table_age).toBe(0.75 * r.values.autovacuum_freeze_max_age);
+  });
+
+  it("never proposes multixact_freeze_max_age below the Postgres default", () => {
+    const r = optimize(stats({}));
+    expect(r.values.autovacuum_multixact_freeze_max_age).toBeGreaterThanOrEqual(400_000_000);
+  });
+
   it("keeps freeze_table_age under freeze_max_age", () => {
     const r = optimize(demoStats);
     expect(r.values.vacuum_freeze_table_age).toBeLessThan(r.values.autovacuum_freeze_max_age);
@@ -199,6 +230,24 @@ describe("cost budget", () => {
     expect(runCost(relaxed.values, 1_700_000).seconds).toBeLessThanOrEqual(
       runCost(tight.values, 1_700_000).seconds,
     );
+  });
+});
+
+describe("overload warnings", () => {
+  it("warns when a pass cannot finish inside the cadence on the delay-metered path", () => {
+    // 2 TB, 20M dead rows/day, tight budget: one pass takes ~15 h against a
+    // 6 h cadence. The delay-metered branch used to stay silent.
+    const r = optimize(
+      stats({
+        live: 2_000_000_000,
+        dead: 50_000_000,
+        pages: 262_144_000,
+        deadPerDay: 20_000_000,
+        insPerDay: 5_000_000,
+        modPerDay: 25_000_000,
+      }),
+    );
+    expect(r.warnings.join(" ")).toMatch(/cannot keep up|not reachable/);
   });
 });
 

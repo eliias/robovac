@@ -260,30 +260,13 @@ function solve(
     values.autovacuum_freeze_max_age = clampToDef("autovacuum_freeze_max_age", freezeMax);
     reasons.autovacuum_freeze_max_age = `Puts the forced anti-wraparound vacuum 30-90 days out at the measured xid rate (${(rates.xidPerDay / 1e6).toFixed(1)} M/day).`;
   }
-  const tableAge = clampToDef(
-    "vacuum_freeze_table_age",
-    roundHuman(0.75 * values.autovacuum_freeze_max_age),
-  );
-  if (tableAge !== snap.current.vacuum_freeze_table_age) {
-    values.vacuum_freeze_table_age = tableAge;
-    reasons.vacuum_freeze_table_age =
-      "75% of freeze_max_age, so aggressive vacuums run on our schedule, not the forced one.";
-  }
   if (snap.hints?.fkHeavy) {
     warnings.push(
       "fkHeavy: multixact member space can fill long before multixact age looks bad; watch members, not only ages.",
     );
-  } else {
-    const multixact = clampToDef(
-      "autovacuum_multixact_freeze_max_age",
-      Math.min(roundHuman(1.5 * values.autovacuum_freeze_max_age), 1_200_000_000),
-    );
-    if (multixact !== snap.current.autovacuum_multixact_freeze_max_age) {
-      values.autovacuum_multixact_freeze_max_age = multixact;
-      reasons.autovacuum_multixact_freeze_max_age =
-        "Scaled with freeze_max_age; multixact age grows with shared row locks.";
-    }
   }
+  // vacuum_freeze_table_age and multixact follow freeze_max_age. They are
+  // derived in prove(), after every gate that can still move freeze_max_age.
 
   // Cost budget.
   values.autovacuum_vacuum_cost_delay = 2;
@@ -320,15 +303,15 @@ function solve(
     reasons.autovacuum_vacuum_cost_delay = `Raised so the pass stays under ${budgetCap} MB/s (the ${budget} replication-lag budget).`;
   } else if (chosen === null) {
     chosen = bestUnderBudget ?? COST_LIMIT_STEPS[0];
-    const c = runCost({ ...values, autovacuum_vacuum_cost_limit: chosen }, snap.pages);
-    if (c.seconds > durationTarget) {
-      warnings.push(
-        `A full pass needs ${Math.round(c.seconds / 60)} min inside the ${budget} replication budget; the cadence target is not reachable without relaxing the budget.`,
-      );
-    }
   }
   values.autovacuum_vacuum_cost_limit = clampToDef("autovacuum_vacuum_cost_limit", chosen);
   reasons.autovacuum_vacuum_cost_limit = `Smallest budget that finishes a pass inside the cadence under the ${budget} replication-lag budget.`;
+  const finalCost = runCost(values, snap.pages);
+  if (finalCost.seconds > durationTarget) {
+    warnings.push(
+      `A full pass needs ${Math.round(finalCost.seconds / 60)} min inside the ${budget} replication budget; the cadence target is not reachable without relaxing the budget.`,
+    );
+  }
   if (snap.current.autovacuum_vacuum_cost_delay !== 2) {
     reasons.autovacuum_vacuum_cost_delay =
       "2 ms is the Postgres 12+ default; the old 20 ms throttles vacuum 10x.";
@@ -350,6 +333,7 @@ function prove(
   rates: Rates,
   cls: Classification,
   solved: { values: Values; reasons: Record<string, string>; cadenceDays: number },
+  warnings: string[],
 ): void {
   const { values, reasons } = solved;
   const cur = snap.current;
@@ -360,11 +344,17 @@ function prove(
       const c = cur[d.key];
       const v = values[d.key];
       if (v === c || c <= 0) continue;
-      const clamped = clamp(v, c / 10, c * 10);
-      if (clamped !== v) {
-        values[d.key] = clampToDef(d.key, clamped);
+      const bounded = clamp(v, c / 10, c * 10);
+      if (bounded !== v) {
+        const final = clampToDef(d.key, bounded);
+        values[d.key] = final;
+        // The allowed range can push the value past the 10x step, e.g. a
+        // 4M reloption against a 100M minimum. Say what actually happened.
         reasons[d.key] =
-          (reasons[d.key] ?? "") + " (low-confidence step, at most 10x from current)";
+          (reasons[d.key] ?? "") +
+          (final === bounded
+            ? " (low-confidence step, at most 10x from current)"
+            : " (low-confidence step, limited by the allowed range)");
       }
     }
   }
@@ -405,10 +395,29 @@ function prove(
     const daysNew = daysToAggressive(values.autovacuum_freeze_max_age, snap.xidAge, snap.xidPerDay);
     if (daysNew < Math.min(14, daysCur)) {
       values.autovacuum_freeze_max_age = cur.autovacuum_freeze_max_age;
-      values.vacuum_freeze_table_age = cur.vacuum_freeze_table_age;
       reasons.autovacuum_freeze_max_age =
         "Kept current: the proposal would pull the forced aggressive vacuum under 14 days out.";
-      delete reasons.vacuum_freeze_table_age;
+    }
+  }
+
+  // The rest of the freeze chain follows freeze_max_age, so it is derived
+  // here, after the last gate that can move freeze_max_age. Exact ratios,
+  // no rounding: rounding 0.75x back onto the 1/2/5 grid lands on 1.0x.
+  const tableAge = clampToDef("vacuum_freeze_table_age", 0.75 * values.autovacuum_freeze_max_age);
+  if (tableAge !== cur.vacuum_freeze_table_age) {
+    values.vacuum_freeze_table_age = tableAge;
+    reasons.vacuum_freeze_table_age =
+      "75% of freeze_max_age, so aggressive vacuums run on our schedule, not the forced one.";
+  }
+  if (!snap.hints?.fkHeavy) {
+    const multixact = clampToDef(
+      "autovacuum_multixact_freeze_max_age",
+      clamp(1.5 * values.autovacuum_freeze_max_age, 400_000_000, 1_200_000_000),
+    );
+    if (multixact !== cur.autovacuum_multixact_freeze_max_age) {
+      values.autovacuum_multixact_freeze_max_age = multixact;
+      reasons.autovacuum_multixact_freeze_max_age =
+        "Scaled with freeze_max_age, never below the Postgres default; multixact age grows with shared row locks.";
     }
   }
 
@@ -431,6 +440,11 @@ function prove(
     if (guard > 0) {
       reasons.autovacuum_vacuum_threshold +=
         " Raised further so total vacuum time stays inside the worker budget.";
+    }
+    if (newLoad > cap) {
+      warnings.push(
+        "The dead-row rate outruns the worker budget at any threshold: vacuum cannot keep up on this table. Raise autovacuum_max_workers or relax the replication-lag budget.",
+      );
     }
   }
 
@@ -516,7 +530,7 @@ export function optimize(snap: SnapshotStats): OptimizeResult {
   }
 
   const solved = solve(snap, rates, cls, warnings);
-  prove(snap, rates, cls, solved);
+  prove(snap, rates, cls, solved, warnings);
 
   return {
     values: solved.values,

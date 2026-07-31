@@ -636,7 +636,7 @@ export function ReportView() {
             : measured
               ? `Two statistics reads, ${fmtSecs(snap.sampleSeconds!)} apart, with identical counters: the write rate is a measured zero, not an unknown.`
               : `Single sample: no rate can be derived from one statistics read. Every figure that needs a rate says "unknown" instead of assuming one.`,
-          `Duration model: cost = pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Page mix estimated from pg_statio_user_tables. Real runs vary with shared_buffers pressure${snap.indexes !== null ? ` and index count (${snap.indexes} indexes on this table)` : ""}.`,
+          `Duration model: cost = pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. The page mix (55% hit, 25% miss, 20% dirty) is a fixed assumption, not measured. Real runs vary with shared_buffers pressure${snap.indexes !== null ? ` and index count (${snap.indexes} indexes on this table)` : ""}.`,
           "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
           "Snapshot is a point-in-time read encoded in this URL. Nothing is stored server-side, and nothing here has been applied to your database.",
         ].map((text, i) => (
