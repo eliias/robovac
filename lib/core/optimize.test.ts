@@ -314,6 +314,22 @@ describe("PROVE gates", () => {
 });
 
 describe("horizon-blocked overlay", () => {
+  it("does not diagnose a pinned horizon on a tiny table", () => {
+    // 6 dead of 40 live is a 15% ratio, but 6 rows is noise, not a horizon.
+    const r = optimize(
+      stats({
+        live: 40,
+        dead: 6,
+        pages: 1,
+        deadPerDay: 0,
+        insPerDay: 0,
+        lastAutovacuum: "2026-07-30T08:00:00Z",
+        capturedAt: "2026-07-30T12:00:00Z",
+      }),
+    );
+    expect(r.diagnosis).toBeUndefined();
+  });
+
   it("returns a diagnosis and keeps every setting", () => {
     const r = optimize(
       stats({

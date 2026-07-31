@@ -74,6 +74,10 @@ function effectiveSettings(globals: Map<string, string>, reloptions: string[]): 
   return values;
 }
 
+function fmtLong(v: number): string {
+  return v.toLocaleString("en-US");
+}
+
 function deadDelta(row: Row): number {
   return num(row, "n_tup_upd") - num(row, "n_tup_hot_upd") + num(row, "n_tup_del");
 }
@@ -85,15 +89,36 @@ function parseCapturedAt(row: Row, which: string): number {
   return ms;
 }
 
-export function buildSnapshot(first: Row, second: Row, hints?: Hints): Snapshot {
+// The counters a reset shows up in. Checked before any delta divides.
+const MONOTONIC_COUNTERS = ["n_tup_ins", "n_tup_upd", "n_tup_del", "n_tup_hot_upd", "xid_now"];
+
+function detectReset(
+  first: Row,
+  second: Row,
+): { counter: string; first: number; second: number } | undefined {
+  let worst: { counter: string; first: number; second: number } | undefined;
+  for (const counter of MONOTONIC_COUNTERS) {
+    const a = num(first, counter);
+    const b = num(second, counter);
+    if (b < a && (!worst || a - b > worst.first - worst.second)) {
+      worst = { counter, first: a, second: b };
+    }
+  }
+  return worst;
+}
+
+export function buildSnapshot(first: Row, secondRow?: Row, hints?: Hints): Snapshot {
+  const two = secondRow !== undefined;
+  const second = secondRow ?? first;
   const aMs = parseCapturedAt(first, "first");
   const bMs = parseCapturedAt(second, "second");
   const dtSeconds = Math.max(1, (bMs - aMs) / 1000);
   const dtDays = dtSeconds / 86400;
-  const deadDeltaRows = deadDelta(second) - deadDelta(first);
-  const insDeltaRows = num(second, "n_tup_ins") - num(first, "n_tup_ins");
-  const hotDelta = num(second, "n_tup_hot_upd") - num(first, "n_tup_hot_upd");
-  const updDelta = num(second, "n_tup_upd") - num(first, "n_tup_upd");
+  const countersReset = two ? detectReset(first, second) : undefined;
+  const deadDeltaRows = countersReset ? 0 : deadDelta(second) - deadDelta(first);
+  const insDeltaRows = countersReset ? 0 : num(second, "n_tup_ins") - num(first, "n_tup_ins");
+  const hotDelta = countersReset ? 0 : num(second, "n_tup_hot_upd") - num(first, "n_tup_hot_upd");
+  const updDelta = countersReset ? 0 : num(second, "n_tup_upd") - num(first, "n_tup_upd");
 
   const stats = {
     v: 1 as const,
@@ -119,11 +144,17 @@ export function buildSnapshot(first: Row, second: Row, hints?: Hints): Snapshot 
     versionNum: num(second, "version_num"),
     isPartition: Boolean(second.is_partition),
     hasToast: Boolean(second.has_toast),
-    rateConfidence: (dtSeconds >= MIN_SAMPLE_SECONDS && deadDeltaRows + insDeltaRows >= 50
+    rateConfidence: (two &&
+    !countersReset &&
+    dtSeconds >= MIN_SAMPLE_SECONDS &&
+    deadDeltaRows + insDeltaRows >= 50
       ? "high"
       : "low") as "high" | "low",
-    sampleSeconds: Math.round(dtSeconds),
+    sampleSeconds: two ? Math.round(dtSeconds) : undefined,
     allVisiblePages: optNum(second, "relallvisible"),
+    countersReset,
+    lastVacuum: "last_vacuum" in second ? text(second, "last_vacuum") : undefined,
+    autovacuumOff: reloptionsList(second).includes("autovacuum_enabled=false") || undefined,
     hints,
   };
   const proposal = optimize(stats);
@@ -140,6 +171,14 @@ export function verdict(snap: Snapshot): string {
     return (
       `Autovacuum fires every ${fmtDur(thr / snap.deadPerDay)} at the observed write rate. ` +
       `The table reaches ${fmtCompact(thr)} dead tuples before each run${tail}`
+    );
+  }
+  if (snap.countersReset) {
+    const r = snap.countersReset;
+    return (
+      `${r.counter} fell from ${fmtLong(r.first)} to ${fmtLong(r.second)} between the two samples: ` +
+      `statistics were reset, and rates are unknown. ` +
+      `The trigger sits at ${fmtCompact(thr)} dead tuples${tail}`
     );
   }
   if (hasMeasuredRate(snap)) {

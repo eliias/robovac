@@ -92,3 +92,57 @@ describe("codec", () => {
     }
   });
 });
+
+describe("codec error kinds", () => {
+  it("B3: an empty fragment has its own kind", () => {
+    for (const f of ["", "#"]) {
+      try {
+        decodeReport(f);
+        throw new Error("expected CodecError");
+      } catch (e) {
+        expect((e as CodecError).kind).toBe("empty");
+      }
+    }
+  });
+
+  it("B1: a truncated v2 link reports received and expected bytes", () => {
+    const full = encodeReport({ snap: DEMO_SNAPSHOT });
+    const cut = full.slice(0, Math.floor(full.length * 0.45));
+    try {
+      decodeReport(cut);
+      throw new Error("expected CodecError");
+    } catch (e) {
+      const err = e as CodecError;
+      expect(err.kind).toBe("truncated");
+      expect(err.received).toBeGreaterThan(0);
+      expect(err.expected).toBeGreaterThan(err.received!);
+    }
+  });
+
+  it("B2: an unknown version has kind version", () => {
+    try {
+      decodeReport("9.abc");
+      throw new Error("expected CodecError");
+    } catch (e) {
+      expect((e as CodecError).kind).toBe("version");
+    }
+  });
+
+  it("B4: an out-of-range payload has kind invalid and carries the payload text", () => {
+    const snap = { ...DEMO_SNAPSHOT, pages: 0 };
+    try {
+      decodeReport(encodeReport({ snap: snap as never }));
+      throw new Error("expected CodecError");
+    } catch (e) {
+      const err = e as CodecError;
+      expect(err.kind).toBe("invalid");
+      expect(err.payloadText).toContain('"pages":0');
+    }
+  });
+
+  it("still decodes a v1 link", () => {
+    const v2 = encodeReport({ snap: DEMO_SNAPSHOT });
+    const v1 = "1." + v2.split(".").slice(2).join(".");
+    expect(decodeReport(v1)).toEqual({ snap: DEMO_SNAPSHOT });
+  });
+});

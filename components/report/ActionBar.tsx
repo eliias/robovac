@@ -12,6 +12,7 @@ export function ActionBar({
   periodDays,
   zeroCadence,
   copied,
+  canCopy,
   onOptimize,
   onCopy,
 }: {
@@ -20,6 +21,8 @@ export function ActionBar({
   /** The phrase after "vacuum" when the rate is zero. */
   zeroCadence: string;
   copied: boolean;
+  /** E1: without clipboard access the button reads "select SQL". */
+  canCopy: boolean;
   onOptimize: () => void;
   onCopy: () => void;
 }) {
@@ -59,7 +62,7 @@ export function ActionBar({
         onClick={onCopy}
         style={{ ...secondaryButton, height: 44, padding: "0 14px" }}
       >
-        {copied ? "copied" : "copy SQL"}
+        {canCopy ? (copied ? "copied" : "copy SQL") : "select SQL"}
       </button>
       <button
         className="btn-primary"

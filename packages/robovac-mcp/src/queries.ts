@@ -33,6 +33,7 @@ SELECT
   s.n_tup_del                                                 AS n_tup_del,
   s.n_tup_hot_upd                                             AS n_tup_hot_upd,
   s.last_autovacuum::text                                     AS last_autovacuum,
+  s.last_vacuum::text                                         AS last_vacuum,
   s.n_mod_since_analyze                                       AS n_mod_since_analyze,
   age(c.relfrozenxid)                                         AS xid_age,
   mxid_age(c.relminmxid)                                      AS mxid_age,

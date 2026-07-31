@@ -12,9 +12,18 @@ import {
   threshold,
 } from "@/lib/core/model";
 import type { Values } from "@/lib/core/settings";
-import { hasMeasuredRate, type Snapshot } from "@/lib/core/snapshot";
+import { hasMeasuredRate, rateState, type Snapshot } from "@/lib/core/snapshot";
+import { UnavailableBody } from "./states";
 
 const DANGER_START = 1600000000;
+
+/** The reason the xid rate is unknown, or null when it is measured. */
+function xidRateUnknown(snap: Snapshot): string | null {
+  const rs = rateState(snap);
+  if (rs === "reset") return "counters reset";
+  if (rs === "single") return "needs 2 samples";
+  return null;
+}
 
 function FrameTitle({ title, caption }: { title: string; caption: React.ReactNode }) {
   return (
@@ -60,6 +69,25 @@ export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values
   const W = 496;
   const H = 172;
   const DAYS = 60;
+  // D1/D3: without a rate there is no sawtooth. The frame and its figure
+  // number stay so the reader learns the figure exists and why it is empty.
+  const rs = rateState(snap);
+  const unavailable = rs === "reset" || (rs === "single" && snap.deadPerDay === 0);
+  if (unavailable) {
+    return (
+      <div style={panel}>
+        <FrameTitle
+          title="FIG. 1 — DEAD TUPLES, 60 d"
+          caption={<span style={{ color: C.ghost }}>unavailable</span>}
+        />
+        <UnavailableBody>
+          The sawtooth needs a write rate.
+          <br />
+          <span style={{ color: C.ghost }}>Fig. 2 and Fig. 3 render normally.</span>
+        </UnavailableBody>
+      </div>
+    );
+  }
   return (
     <div style={panel}>
       <FrameTitle title="FIG. 1 — DEAD TUPLES, 60 d" caption="sawtooth = vacuum fires" />
@@ -245,17 +273,34 @@ export function FigFreezeHorizon({ snap, values }: { snap: Snapshot; values: Val
         </div>
         <div style={{ marginTop: 12 }}>
           <TwoCellStrip
-            cells={[
-              {
-                label: "AGGRESSIVE VACUUM IN",
-                value: days <= 0 ? "running now — age exceeds limit" : fmtDur(days),
-                color: days <= 0 ? C.warn : "#fff",
-              },
-              {
-                label: "SHUTDOWN MARGIN",
-                value: `${fmtDur(shutdownMarginDays(snap.xidAge, snap.xidPerDay))} of xids`,
-              },
-            ]}
+            cells={
+              // Both figures divide by the xid rate. Without one they read
+              // as a dash with the reason, never as an exact-looking number.
+              xidRateUnknown(snap)
+                ? [
+                    {
+                      label: "AGGRESSIVE VACUUM IN",
+                      value: `— · ${xidRateUnknown(snap)}`,
+                      color: C.ghost,
+                    },
+                    {
+                      label: "SHUTDOWN MARGIN",
+                      value: `— · ${xidRateUnknown(snap)}`,
+                      color: C.ghost,
+                    },
+                  ]
+                : [
+                    {
+                      label: "AGGRESSIVE VACUUM IN",
+                      value: days <= 0 ? "running now · age exceeds limit" : fmtDur(days),
+                      color: days <= 0 ? C.warn : "#fff",
+                    },
+                    {
+                      label: "SHUTDOWN MARGIN",
+                      value: `${fmtDur(shutdownMarginDays(snap.xidAge, snap.xidPerDay))} of xids`,
+                    },
+                  ]
+            }
           />
         </div>
       </div>

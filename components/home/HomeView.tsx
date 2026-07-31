@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { TermLink } from "@/components/TermLink";
 import { C, MONO, SANS, panel, primaryButton, secondaryButton } from "@/components/ui";
+import { selectContents, useClipboard } from "@/components/useClipboard";
 import { useViewport } from "@/components/useViewport";
 import { encodeReport } from "@/lib/core/codec";
-import { parseSnapshotPaste } from "@/lib/core/parse";
+import { DEMO_SNAPSHOT } from "@/lib/core/fixtures";
+import { classifyPaste, type PastedRow, type PasteError } from "@/lib/core/parse";
 import { SETTINGS } from "@/lib/core/settings";
 import { TERMS } from "@/lib/terms";
 import { snapshotSql } from "@/packages/robovac-mcp/src/queries";
@@ -14,6 +16,10 @@ import { buildSnapshot } from "@/packages/robovac-mcp/src/report";
 
 // The generated SQL aligns its AS clauses with wide whitespace; collapse it so
 // the narrow homepage column shows one select item per line.
+function openDemo() {
+  window.location.href = `/report#${encodeReport({ snap: DEMO_SNAPSHOT })}`;
+}
+
 const QUERY = snapshotSql("schema", "table")
   .trim()
   .split("\n")
@@ -27,7 +33,7 @@ const PASTE_PLACEHOLDER = `  relname   | relpages | n_live_tup | n_dead_tup | la
 const FINDINGS: { title: string; body: React.ReactNode }[] = [
   {
     title: "How often vacuum actually fires",
-    body: 'Your trigger threshold against your write rate, in days — not percentages. Most large tables discover here that the answer is "every three weeks".',
+    body: 'Your trigger threshold against your write rate, in days, not percentages. Most large tables discover here that the answer is "every three weeks".',
   },
   {
     title: "How close the freeze horizon is",
@@ -94,28 +100,79 @@ function SectionTitle({ text }: { text: string }) {
 export function HomeView() {
   const { narrow, mobile } = useViewport();
   const [paste, setPaste] = useState("");
-  const [message, setMessage] = useState<{ text: string; warn: boolean } | null>(null);
+  const [feedback, setFeedback] = useState<
+    PasteError | { kind: "build-failed"; detail: string } | null
+  >(null);
   const [queryCopied, setQueryCopied] = useState(false);
+  const { canCopy } = useClipboard();
+  const queryRef = useRef<HTMLPreElement>(null);
 
   const gridCols = narrow ? "minmax(0,1fr)" : "minmax(0,1fr) 520px";
   const bandGap = mobile ? 24 : 48;
 
-  const build = () => {
-    if (paste.trim().length < 40) {
-      setMessage({
-        text: "That does not look like query output — paste the full result, headers included.",
-        warn: true,
-      });
-      return;
-    }
+  const openReport = (first: PastedRow, second?: PastedRow) => {
     try {
-      const { first, second } = parseSnapshotPaste(paste);
-      const snap = buildSnapshot(first, second ?? first);
+      const snap = buildSnapshot(first, second);
       window.location.href = `/report#${encodeReport({ snap })}`;
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : String(e), warn: true });
+      setFeedback({ kind: "build-failed", detail: e instanceof Error ? e.message : String(e) });
     }
   };
+
+  // Validation runs on submit, never on keystroke, and the paste stays
+  // exactly as pasted so it can be corrected in place.
+  const build = () => {
+    const result = classifyPaste(paste);
+    if (result.ok) openReport(result.first, result.second);
+    else setFeedback(result.error);
+  };
+
+  const copyQuery = async () => {
+    if (canCopy) {
+      try {
+        await navigator.clipboard.writeText(QUERY);
+        setQueryCopied(true);
+        return;
+      } catch {
+        /* fall through to select */
+      }
+    }
+    selectContents(queryRef.current);
+  };
+
+  // P4 is an ambiguity, not an error; everything else carries the warning
+  // tone on the frame border, never on the button.
+  const feedbackWarn = feedback !== null && feedback.kind !== "multiple-tables";
+  const feedbackLines = (() => {
+    if (!feedback) return null;
+    switch (feedback.kind) {
+      case "unparseable":
+        return {
+          msg: "No query output found in that paste.",
+          help: "Expected psql aligned output, psql \\x expanded output, CSV with a header, or row_to_json. Paste the result of the query in step 01, including its header row.",
+        };
+      case "query":
+        return {
+          msg: "That is the query, not its result.",
+          help: "Run it in psql against the database that holds the table, then paste what it prints.",
+        };
+      case "missing-columns":
+        return {
+          msg: `Missing ${feedback.columns.join(", ")}.`,
+          help: `${feedback.columns.length} column${feedback.columns.length === 1 ? "" : "s"} short of a report: sizes, freeze horizon and current settings all come from those. Re-run the query in step 01 unmodified (a hand-written SELECT usually omits the pg_class and pg_settings joins).`,
+        };
+      case "multiple-tables":
+        return {
+          msg: `${feedback.tables.length} tables in that result. robovac tunes one at a time.`,
+          help: "Pick one and it becomes the report; the others stay listed so you can switch. Autovacuum settings are per-table, and so is every formula here.",
+        };
+      case "build-failed":
+        return {
+          msg: "The paste parses, but a report cannot be built from it.",
+          help: feedback.detail,
+        };
+    }
+  })();
 
   return (
     <div className="page-pad" style={{ maxWidth: 1080, margin: "0 auto", paddingTop: 0 }}>
@@ -170,7 +227,7 @@ export function HomeView() {
               margin: "12px 0 0",
             }}
           >
-            No account, no agent required, no write access. It never connects to your database — you
+            No account, no agent required, no write access. It never connects to your database, you
             bring the numbers.
           </p>
         </div>
@@ -256,14 +313,7 @@ export function HomeView() {
               </span>
               <button
                 className="copy-btn"
-                onClick={() => {
-                  try {
-                    navigator.clipboard.writeText(QUERY);
-                  } catch {
-                    /* clipboard unavailable */
-                  }
-                  setQueryCopied(true);
-                }}
+                onClick={copyQuery}
                 style={{
                   fontFamily: MONO,
                   fontSize: 10.5,
@@ -275,10 +325,11 @@ export function HomeView() {
                   cursor: "pointer",
                 }}
               >
-                {queryCopied ? "copied" : "copy"}
+                {canCopy ? (queryCopied ? "copied" : "copy") : "select all"}
               </button>
             </div>
             <pre
+              ref={queryRef}
               style={{
                 padding: 12,
                 maxHeight: 260,
@@ -289,6 +340,9 @@ export function HomeView() {
                 color: C.code,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
+                ...(canCopy
+                  ? {}
+                  : { outline: "1px solid rgba(255,255,255,0.16)", outlineOffset: -1 }),
               }}
             >
               {QUERY}
@@ -303,17 +357,23 @@ export function HomeView() {
               }}
             >
               Change the schema and table name, and run it twice, 30-60 s apart, for real rates. It
-              reads statistics catalogues only — no table data, no locks, safe on a primary.
+              reads statistics catalogues only: no table data, no locks, safe on a primary.
             </div>
           </div>
 
-          <div style={{ ...panel, marginTop: 12 }}>
+          <div
+            style={{
+              ...panel,
+              marginTop: 12,
+              ...(feedbackWarn ? { border: "1px solid oklch(0.70 0.10 62 / 0.32)" } : {}),
+            }}
+          >
             <SectionTitle text="02 — PASTE THE OUTPUT" />
             <textarea
               value={paste}
               onChange={(e) => {
                 setPaste(e.target.value);
-                setMessage(null);
+                setFeedback(null);
               }}
               placeholder={PASTE_PLACEHOLDER}
               style={{
@@ -347,18 +407,83 @@ export function HomeView() {
               >
                 → build the report
               </button>
-            </div>
-            {message && (
-              <div
+              <span
+                onClick={openDemo}
                 style={{
-                  padding: "0 12px 11px",
                   fontFamily: MONO,
-                  fontSize: 10.5,
-                  lineHeight: 1.6,
-                  color: message.warn ? C.warn : C.faint,
+                  fontSize: 12,
+                  color: C.dim,
+                  borderBottom: "1px dotted #35353c",
+                  cursor: "pointer",
                 }}
               >
-                {message.text}
+                or open a demo report
+              </span>
+            </div>
+            {feedbackLines && (
+              <div style={{ padding: "0 12px 12px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <span
+                    style={{
+                      flex: "none",
+                      marginTop: 5,
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: feedbackWarn ? C.warn : C.dim,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        lineHeight: 1.6,
+                        color: feedbackWarn ? C.warn : C.strong,
+                      }}
+                    >
+                      {feedbackLines.msg}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 10.5,
+                        lineHeight: 1.6,
+                        color: C.faint,
+                        marginTop: 4,
+                      }}
+                    >
+                      {feedbackLines.help}
+                    </div>
+                  </div>
+                </div>
+                {feedback?.kind === "multiple-tables" && (
+                  <div style={{ border: `1px solid ${C.border}`, marginTop: 10 }}>
+                    {feedback.tables.map((t) => (
+                      <div
+                        key={t.name}
+                        className="term-link"
+                        onClick={() => openReport(t.rows[0], t.rows[1])}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 14,
+                          padding: "10px 12px",
+                          borderBottom: `1px solid ${C.hair}`,
+                          alignItems: "baseline",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.strong }}>
+                          {t.name}
+                        </span>
+                        <span style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint }}>
+                          {(t.deadRatio * 100).toFixed(2)}% dead
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div

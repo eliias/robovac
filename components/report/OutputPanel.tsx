@@ -4,11 +4,14 @@ import { C, MONO, panel, panelHeader } from "@/components/ui";
 import { useViewport } from "@/components/useViewport";
 import { fmtVal } from "@/lib/core/format";
 import { SETTINGS, type Values } from "@/lib/core/settings";
-import type { Snapshot } from "@/lib/core/snapshot";
+import { isSmallTable, type Snapshot } from "@/lib/core/snapshot";
 
 export function buildSql(snap: Snapshot, values: Values): string {
   const changed = SETTINGS.filter((d) => values[d.key] !== snap.current[d.key]);
   if (!changed.length) {
+    if (isSmallTable(snap)) {
+      return `-- no changes recommended for a table this size.`;
+    }
     return `-- sliders match the current settings on ${snap.table}.\n-- nothing to apply.`;
   }
   const sqlNum = (d: (typeof SETTINGS)[number]) => {
@@ -26,11 +29,14 @@ export function OutputPanel({
   snap,
   values,
   copied,
+  canCopy,
   onCopy,
 }: {
   snap: Snapshot;
   values: Values;
   copied: boolean;
+  /** E1: without clipboard access the button reads "select all". */
+  canCopy: boolean;
   onCopy: (sql: string) => void;
 }) {
   const { mobile } = useViewport();
@@ -56,10 +62,11 @@ export function OutputPanel({
             cursor: "pointer",
           }}
         >
-          {copied ? "copied" : "copy"}
+          {canCopy ? (copied ? "copied" : "copy") : "select all"}
         </button>
       </div>
       <pre
+        id="output-sql"
         style={{
           padding: 12,
           fontFamily: MONO,
@@ -71,10 +78,25 @@ export function OutputPanel({
           whiteSpace: mobile ? "pre" : "pre-wrap",
           overflowX: mobile ? "auto" : undefined,
           wordBreak: "break-word",
+          ...(canCopy ? {} : { outline: "1px solid rgba(255,255,255,0.16)", outlineOffset: -1 }),
         }}
       >
         {sql}
       </pre>
+      {!canCopy && (
+        <div
+          style={{
+            padding: "9px 12px",
+            borderTop: `1px solid ${C.border08}`,
+            fontFamily: MONO,
+            fontSize: 10.5,
+            color: C.faint,
+            lineHeight: 1.6,
+          }}
+        >
+          Clipboard access needs a secure context. Select the block and copy.
+        </div>
+      )}
     </div>
   );
 }

@@ -315,3 +315,35 @@ export function termHref(slug: string): string {
   const entry = TERMS.find((t) => t.slug === slug);
   return entry ? `/explain/${slug}` : "/arcana";
 }
+
+function trigrams(s: string): Set<string> {
+  const padded = `  ${s.toLowerCase()} `;
+  const out = new Set<string>();
+  for (let i = 0; i < padded.length - 2; i++) out.add(padded.slice(i, i + 3));
+  return out;
+}
+
+/**
+ * N1: nearest built terms for a slug that matches none of them. Exact, then
+ * prefix, then trigram similarity over slug and title, so a dropped
+ * vacuum_ prefix or a typo still resolves.
+ */
+export function suggestTerms(slug: string, count = 3): TermEntry[] {
+  const built = TERMS.filter((t) => t.built);
+  const q = slug.toLowerCase();
+  const query = trigrams(q);
+  return built
+    .map((t) => {
+      let score = 0;
+      if (t.slug === q) score += 10;
+      if (t.slug.startsWith(q) || q.startsWith(t.slug)) score += 0.5;
+      const own = trigrams(`${t.slug} ${t.term}`);
+      let hits = 0;
+      for (const g of query) if (own.has(g)) hits++;
+      score += hits / Math.max(1, query.size);
+      return { t, score };
+    })
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, count)
+    .map((x) => x.t);
+}

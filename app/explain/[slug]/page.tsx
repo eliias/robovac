@@ -12,7 +12,9 @@ export function generateStaticParams() {
   return TERMS.filter((t) => t.built).map((t) => ({ slug: t.slug }));
 }
 
-export const dynamicParams = false;
+// Unknown slugs reach the page, which calls notFound() so the sibling
+// not-found boundary renders the suggestions with a real 404 status (N1).
+export const dynamicParams = true;
 
 export async function generateMetadata({
   params,
@@ -91,7 +93,27 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
         {definition}
       </p>
 
-      {Demo && <Demo />}
+      {Demo && (
+        <>
+          <noscript>
+            <div
+              style={{
+                border: "1px solid rgba(255,255,255,0.09)",
+                background: "#0b0b0d",
+                padding: "11px 13px",
+                fontFamily: MONO,
+                fontSize: 11,
+                color: "#8a8a90",
+                lineHeight: 1.6,
+              }}
+            >
+              The demo below needs JavaScript. Every definition, every formula and the snapshot
+              query are plain text and are on this page already.
+            </div>
+          </noscript>
+          <Demo />
+        </>
+      )}
 
       <div style={{ marginTop: 26, display: "flex", flexDirection: "column", gap: 7 }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint, letterSpacing: "0.05em" }}>

@@ -41,6 +41,12 @@ export interface Snapshot {
   sampleSeconds?: number;
   /** pg_class.relallvisible: heap pages a vacuum pass skips. Absent on older links. */
   allVisiblePages?: number;
+  /** A statistics counter fell between the samples: reset, restart, or two servers. */
+  countersReset?: { counter: string; first: number; second: number };
+  /** pg_stat_user_tables.last_vacuum, when the snapshot SQL carried it. */
+  lastVacuum?: string | null;
+  /** reloptions carry autovacuum_enabled=false. */
+  autovacuumOff?: boolean;
   hints?: Hints;
 }
 
@@ -52,7 +58,33 @@ export const MIN_SAMPLE_SECONDS = 30;
  * is a measured zero write rate, not a missing rate.
  */
 export function hasMeasuredRate(snap: Snapshot): boolean {
-  return (snap.sampleSeconds ?? 0) >= MIN_SAMPLE_SECONDS;
+  return !snap.countersReset && (snap.sampleSeconds ?? 0) >= MIN_SAMPLE_SECONDS;
+}
+
+/** Under this interval, one checkpoint or background job dominates the delta. */
+export const NOISE_SAMPLE_SECONDS = 5;
+
+/**
+ * How much the rates can be trusted, one axis:
+ * reset (a counter fell), single (one statistics read), noisy (interval
+ * under 5 s), low (under 30 s), measured.
+ */
+export type RateStateName = "reset" | "single" | "noisy" | "low" | "measured";
+
+export function rateState(snap: Snapshot): RateStateName {
+  if (snap.countersReset) return "reset";
+  if (snap.sampleSeconds === undefined) return "single";
+  if (snap.sampleSeconds < NOISE_SAMPLE_SECONDS) return "noisy";
+  if (snap.sampleSeconds < MIN_SAMPLE_SECONDS) return "low";
+  return "measured";
+}
+
+/**
+ * D5: under ~50k rows and ~100 MB, autovacuum fires on the 50-row floor and
+ * a pass costs under a second. The defaults are correct; propose nothing.
+ */
+export function isSmallTable(snap: Snapshot): boolean {
+  return snap.live < 50_000 && snap.pages * 8192 < 100 * 1024 * 1024;
 }
 
 const valuesSchema = (rangeOf: (d: SettingDef) => readonly [number, number]) =>
@@ -102,6 +134,11 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
     rateConfidence: z.enum(["high", "low"]).optional(),
     sampleSeconds: z.number().positive().optional(),
     allVisiblePages: z.number().nonnegative().optional(),
+    countersReset: z
+      .object({ counter: z.string(), first: z.number(), second: z.number() })
+      .optional(),
+    lastVacuum: z.string().nullable().optional(),
+    autovacuumOff: z.boolean().optional(),
     hints: z
       .object({
         pattern: z

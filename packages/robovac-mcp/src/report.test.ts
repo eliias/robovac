@@ -106,3 +106,37 @@ describe("buildSnapshot", () => {
     );
   });
 });
+
+describe("degraded-state detection", () => {
+  it("D3: a counter going backwards is flagged, rates zeroed", () => {
+    const second = row({
+      captured_at: "2026-07-30T12:01:00+00:00",
+      n_tup_upd: "118402",
+    });
+    const snap = buildSnapshot(row({ n_tup_upd: "41882004" }), second);
+    expect(snap.countersReset).toEqual({ counter: "n_tup_upd", first: 41882004, second: 118402 });
+    expect(snap.deadPerDay).toBe(0);
+    expect(verdict(snap)).toMatch(/n_tup_upd fell from 41,882,004 to 118,402/);
+  });
+
+  it("D1: a missing second row omits sampleSeconds", () => {
+    const snap = buildSnapshot(row());
+    expect(snap.sampleSeconds).toBeUndefined();
+  });
+
+  it("D6: autovacuum_enabled=false in reloptions sets autovacuumOff", () => {
+    const second = row({
+      captured_at: "2026-07-30T12:01:00+00:00",
+      reloptions: "{autovacuum_enabled=false}",
+    });
+    expect(buildSnapshot(row(), second).autovacuumOff).toBe(true);
+    expect(
+      buildSnapshot(row(), row({ captured_at: "2026-07-30T12:01:00+00:00" })).autovacuumOff,
+    ).toBeUndefined();
+  });
+
+  it("D6: last_vacuum is carried when the column is present", () => {
+    const second = row({ captured_at: "2026-07-30T12:01:00+00:00", last_vacuum: null });
+    expect(buildSnapshot(row(), second).lastVacuum).toBeNull();
+  });
+});

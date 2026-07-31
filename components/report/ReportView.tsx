@@ -10,7 +10,9 @@ import { fmtCadence, fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/c
 import { passPages, runCost, threshold } from "@/lib/core/model";
 import { optimize } from "@/lib/core/optimize";
 import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
-import { hasMeasuredRate, type Snapshot } from "@/lib/core/snapshot";
+import { hasMeasuredRate, isSmallTable, rateState, type Snapshot } from "@/lib/core/snapshot";
+import { NoticeBar, UnknownValue } from "./states";
+import { useClipboard, selectContents } from "@/components/useClipboard";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
 import { buildSql, OutputPanel } from "./OutputPanel";
@@ -47,7 +49,7 @@ function snapshotLabel(snap: Snapshot): string {
 
 export function ReportView() {
   const [payload, setPayload] = useState<ReportPayload | null>(null);
-  const [issues, setIssues] = useState<string[] | null>(null);
+  const [error, setError] = useState<CodecError | null>(null);
   const [values, setValues] = useState<Values | null>(null);
   const [open, setOpen] = useState<Record<Group, boolean>>({
     trigger: true,
@@ -56,20 +58,15 @@ export function ReportView() {
   });
   const [copied, setCopied] = useState(false);
   const { narrow, mobile } = useViewport();
+  const { canCopy } = useClipboard();
   const userChanged = useRef(false);
 
   useEffect(() => {
     // Set once from the initial viewport: on a phone only TRIGGER starts open.
     // Never re-collapse on rotate.
     if (window.innerWidth < 720) setOpen({ trigger: true, cost: false, freeze: false });
-    const fragment = window.location.hash;
-    if (!fragment || fragment === "#") {
-      // No payload, no report: there is no placeholder data.
-      window.location.replace("/");
-      return;
-    }
     try {
-      const p = decodeReport(fragment);
+      const p = decodeReport(window.location.hash);
       setPayload(p);
       const merged: Values = { ...p.snap.current };
       for (const [key, v] of Object.entries(p.tuned ?? {})) {
@@ -77,7 +74,7 @@ export function ReportView() {
       }
       setValues(merged);
     } catch (e) {
-      setIssues(e instanceof CodecError ? e.issues : [String(e)]);
+      setError(e instanceof CodecError ? e : new CodecError("invalid", [String(e)]));
     }
   }, []);
 
@@ -89,6 +86,22 @@ export function ReportView() {
     }
     history.replaceState(null, "", "#" + encodeReport({ snap: payload.snap, tuned }));
   }, [payload, values]);
+
+  // Success is reported only after the write resolves. Without clipboard
+  // access (E1) or on rejection, select the SQL block instead so the reader
+  // copies it themselves. Never show "copied" for an empty clipboard.
+  const copySql = async (sql: string) => {
+    if (canCopy) {
+      try {
+        await navigator.clipboard.writeText(sql);
+        setCopied(true);
+        return;
+      } catch {
+        /* fall through to select */
+      }
+    }
+    selectContents(document.getElementById("output-sql"));
+  };
 
   const setAll = (next: Values) => {
     userChanged.current = true;
@@ -115,7 +128,7 @@ export function ReportView() {
     };
   }, [payload, values]);
 
-  if (issues) return <ErrorState issues={issues} />;
+  if (error) return <ErrorState error={error} />;
   if (!payload || !values || !derived) return null;
 
   const { snap, thrCur, periodCur, periodLive, costCur, costLive, aggressiveNow } = derived;
@@ -123,6 +136,23 @@ export function ReportView() {
   // writes (measured zero), or a single statistics read (no rate at all).
   const measured = hasMeasuredRate(snap);
   const zeroCadence = measured ? "never · no writes observed" : "every unknown · one sample";
+
+  // The degraded states (D1-D6). A missing input degrades the report, it
+  // does not replace it: unknown figures read as a dash with the reason,
+  // never as a zero a DBA would believe.
+  const rState = rateState(snap);
+  const ratesUnknown = rState === "reset" || (rState === "single" && snap.deadPerDay === 0);
+  const estimated = rState === "noisy";
+  const unknownReason = rState === "reset" ? "counters reset" : "needs 2 samples";
+  const small = isSmallTable(snap);
+  const ageDays = (Date.now() - Date.parse(snap.capturedAt)) / 86400000;
+  const stale = ageDays > 7;
+  const neverVacuumed = !snap.lastAutovacuum && !snap.lastVacuum;
+  const optimizeDisabled = estimated
+    ? `rates from a ${fmtSecs(snap.sampleSeconds ?? 0)} interval are noise, not a basis for proposals`
+    : small
+      ? "no changes recommended for a table this size"
+      : null;
   const gridCols = narrow ? "minmax(0,1fr)" : "minmax(0,1fr) 520px";
   const bandGap = mobile ? 24 : 48;
   const pending = SETTINGS.filter((d) => values[d.key] !== snap.proposed[d.key]).length;
@@ -173,20 +203,24 @@ export function ReportView() {
     { label: "last_autovacuum", value: agoLabel(snap) },
     {
       label: "DEAD RATE",
-      value: (
+      value: ratesUnknown ? (
+        <UnknownValue reason={unknownReason} />
+      ) : (
         <>
           {(snap.deadPerDay / 86400).toFixed(1)}
-          <span style={{ color: C.faint, fontSize: 11 }}> tup/s</span>
+          <span style={{ color: C.faint, fontSize: 11 }}> tup/s{estimated && " · est."}</span>
         </>
       ),
     },
     { label: "XID AGE", value: fmtInt(snap.xidAge), color: C.warn },
     {
       label: "XID RATE",
-      value: (
+      value: ratesUnknown ? (
+        <UnknownValue reason={unknownReason} />
+      ) : (
         <>
           {(snap.xidPerDay / 1e6).toFixed(1)}
-          <span style={{ color: C.faint, fontSize: 11 }}> M/day</span>
+          <span style={{ color: C.faint, fontSize: 11 }}> M/day{estimated && " · est."}</span>
         </>
       ),
     },
@@ -196,6 +230,91 @@ export function ReportView() {
     <div
       style={{ maxWidth: 1380, margin: "0 auto", padding: mobile ? "0 16px 128px" : "0 24px 96px" }}
     >
+      {/* Degraded-state notices (D1-D6): the report renders below them. */}
+      {(ratesUnknown || estimated || stale || small || neverVacuumed) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 16 }}>
+          {rState === "reset" && snap.countersReset && (
+            <NoticeBar
+              severity="neutral"
+              title="Counters went backwards. Rates unknown."
+              body={
+                <>
+                  <span style={{ fontFamily: MONO, color: C.strong }}>
+                    {snap.countersReset.counter}
+                  </span>{" "}
+                  fell from {fmtInt(snap.countersReset.first)} to{" "}
+                  {fmtInt(snap.countersReset.second)} between the two samples, so pg_stat_reset()
+                  ran, the server restarted, or the two samples came from different servers.
+                  Everything not derived from a rate is still exact.
+                </>
+              }
+              action={{ label: "take two fresh samples", href: "/" }}
+            />
+          )}
+          {rState === "single" && ratesUnknown && (
+            <NoticeBar
+              severity="neutral"
+              title="One sample. Rates unknown."
+              body="Dead-tuple rate, xid consumption rate, and everything derived from them (days to the next vacuum, days to the freeze limit, shutdown margin) need two readings. Thresholds, sizes, current settings and the proposed values below are computed from this one."
+              action={{ label: "add a second sample", href: "/" }}
+            />
+          )}
+          {estimated && (
+            <NoticeBar
+              severity="neutral"
+              title={`${fmtSecs(snap.sampleSeconds ?? 0)} between samples. Rates are noise.`}
+              body="At this interval a single checkpoint or one background job dominates the delta. Run the query again 30-60 s apart; the rates shown until then are marked estimated and are not used for the proposals."
+              action={{ label: "re-run the query", href: "/" }}
+            />
+          )}
+          {stale && (
+            <NoticeBar
+              severity="neutral"
+              title={`Snapshot is ${Math.floor(ageDays)} days old.`}
+              body={
+                <>
+                  Figures below describe the table as of {snapshotLabel(snap)}.
+                  {!ratesUnknown && !estimated && (
+                    <>
+                      {" "}
+                      At the write rate it recorded, xid age has since advanced by roughly{" "}
+                      {fmtCompact(Math.round(ageDays * snap.xidPerDay))}
+                      {snap.xidAge + ageDays * snap.xidPerDay >
+                        snap.proposed.autovacuum_freeze_max_age &&
+                        ", past the freeze limit this report proposes"}
+                      .
+                    </>
+                  )}
+                </>
+              }
+              action={{ label: "re-run the query", href: "/" }}
+            />
+          )}
+          {small && (
+            <NoticeBar
+              severity="neutral"
+              title={`${fmtInt(snap.live)} live rows. The defaults are correct here.`}
+              body="At this size autovacuum fires on the 50-row floor long before any scale factor matters, and a full pass costs under a second. Nothing on this table is worth changing. The sliders and charts below are live if you want to see why."
+              action={{ label: "snapshot another table", href: "/" }}
+            />
+          )}
+          {neverVacuumed &&
+            (snap.autovacuumOff ? (
+              <NoticeBar
+                severity="neutral"
+                title="Autovacuum is off for this table."
+                body="reloptions carry autovacuum_enabled = false. That is the answer, not a hint: nothing below runs until it is enabled again."
+              />
+            ) : (
+              <NoticeBar
+                severity="neutral"
+                title="Autovacuum has never run on this table."
+                body="Either the table has not yet reached its trigger threshold, autovacuum is off for it in reloptions, or statistics were reset since the last run. The first is expected on a young table; the second is shown in the trigger group below."
+              />
+            ))}
+        </div>
+      )}
+
       {/* Band A: header */}
       <div
         style={{
@@ -267,10 +386,16 @@ export function ReportView() {
                 color: "#ededf0",
               }}
             >
-              {Number.isFinite(periodCur) && periodCur > 0 ? (
+              {rState === "reset" && snap.countersReset ? (
                 <>
-                  Autovacuum fires every {num(fmtDur(periodCur))} at the observed write rate. The
-                  table reaches {num(fmtCompact(thrCur))} dead tuples before each run
+                  {num(snap.countersReset.counter)} fell between the two samples, so rates are
+                  unknown. The trigger sits at {num(fmtCompact(thrCur))} dead tuples
+                </>
+              ) : Number.isFinite(periodCur) && periodCur > 0 ? (
+                <>
+                  Autovacuum fires every {num(fmtDur(periodCur))}
+                  {estimated && num(" (est.)")} at the observed write rate. The table reaches{" "}
+                  {num(fmtCompact(thrCur))} dead tuples before each run
                 </>
               ) : measured ? (
                 <>
@@ -375,7 +500,12 @@ export function ReportView() {
             color: C.muted,
           }}
         >
-          {snap.deadPerDay > 0 ? (
+          {rState === "reset" ? (
+            <>
+              No rate survives a counter reset. Run the query twice, 30-60 s apart, and the rates,
+              cadences, and proposals sharpen.
+            </>
+          ) : snap.deadPerDay > 0 ? (
             <>
               The table takes {(snap.deadPerDay / 86400).toFixed(1)} dead tuples per second, or{" "}
               {fmtInt(snap.deadPerDay)} per day.
@@ -440,12 +570,26 @@ export function ReportView() {
           <button
             className="btn-primary"
             onClick={() => setAll({ ...snap.proposed })}
-            style={{ ...primaryButton, textAlign: "left" }}
+            disabled={Boolean(optimizeDisabled)}
+            style={{
+              ...primaryButton,
+              textAlign: "left",
+              ...(optimizeDisabled
+                ? { background: C.control, color: C.faint, cursor: "default" }
+                : {}),
+            }}
           >
-            {pending === 0
-              ? "✓ all sliders sit at the proposed values"
-              : `→ auto-optimize · apply ${pending} proposed value${pending === 1 ? "" : "s"}`}
+            {optimizeDisabled
+              ? "auto-optimize · disabled"
+              : pending === 0
+                ? "✓ all sliders sit at the proposed values"
+                : `→ auto-optimize · apply ${pending} proposed value${pending === 1 ? "" : "s"}`}
           </button>
+          {optimizeDisabled && (
+            <div style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint, lineHeight: 1.6 }}>
+              {optimizeDisabled}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               className="btn-secondary"
@@ -606,14 +750,8 @@ export function ReportView() {
             snap={snap}
             values={values}
             copied={copied}
-            onCopy={(sql) => {
-              try {
-                navigator.clipboard.writeText(sql);
-              } catch {
-                /* clipboard unavailable */
-              }
-              setCopied(true);
-            }}
+            canCopy={canCopy}
+            onCopy={copySql}
           />
         </div>
       </div>
@@ -662,15 +800,15 @@ export function ReportView() {
           pending={pending}
           periodDays={periodLive}
           zeroCadence={zeroCadence}
+          canCopy={canCopy}
           copied={copied}
           onOptimize={() => setAll({ ...snap.proposed })}
           onCopy={() => {
             try {
-              navigator.clipboard.writeText(buildSql(snap, values));
+              copySql(buildSql(snap, values));
             } catch {
-              /* clipboard unavailable */
+              /* handled in copySql */
             }
-            setCopied(true);
           }}
         />
       )}
