@@ -4,8 +4,6 @@ import { useRef, useState } from "react";
 import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
 import { selectContents, useClipboard } from "@/components/useClipboard";
 import type { CodecError } from "@/lib/core/codec";
-import { encodeReport } from "@/lib/core/codec";
-import { DEMO_SNAPSHOT } from "@/lib/core/fixtures";
 
 /**
  * The four blocked states (B1-B4): no report is possible, so the page says
@@ -198,11 +196,6 @@ function VersionState({ error }: { error: CodecError }) {
   );
 }
 
-function openDemo() {
-  window.location.hash = "#" + encodeReport({ snap: DEMO_SNAPSHOT });
-  window.location.reload();
-}
-
 function EmptyState() {
   return (
     <div style={{ maxWidth: 640 }}>
@@ -217,9 +210,13 @@ function EmptyState() {
         <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
           → build a report
         </a>
-        <button className="btn-secondary" onClick={openDemo} style={secondaryButton}>
+        <a
+          className="btn-secondary"
+          href="/demo"
+          style={{ ...secondaryButton, textDecoration: "none" }}
+        >
           open a demo report
-        </button>
+        </a>
       </div>
     </div>
   );

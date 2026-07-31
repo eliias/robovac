@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
+import { TERMS } from "@/lib/terms";
 
 // N2: no oversized numeral, no joke. The list of destinations is the whole
 // content.
@@ -29,8 +30,8 @@ export default function NotFound() {
             color: C.muted,
           }}
         >
-          robovac has four places: a report builder, an MCP page, an index of 34 terms, and the
-          pages behind it.
+          robovac has five places: a report builder, five demo reports, an MCP page, an index of{" "}
+          {TERMS.filter((t) => t.built).length} terms, and the pages behind it.
         </p>
         <div
           style={{
@@ -44,6 +45,9 @@ export default function NotFound() {
         >
           <Link href="/" className="term-link" style={termLinkStyle}>
             /
+          </Link>
+          <Link href="/demo" className="term-link" style={termLinkStyle}>
+            /demo
           </Link>
           <Link href="/mcp" className="term-link" style={termLinkStyle}>
             /mcp

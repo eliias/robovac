@@ -145,9 +145,15 @@ function classify(snap: SnapshotStats, rates: Rates): Classification {
   const lastAvDays = snap.lastAutovacuum
     ? (Date.parse(snap.capturedAt) - Date.parse(snap.lastAutovacuum)) / 86_400_000
     : Infinity;
-  // The absolute floor keeps a 6-dead-row toy table from reading as a
-  // pinned horizon: the ratio alone is noise below real row counts.
-  const horizonBlocked = deadRatio > 0.1 && snap.dead >= 10_000 && lastAvDays < recentWindowDays;
+  // A pinned horizon means removal is blocked, and blocked removal shows as
+  // many trigger-thresholds worth of dead rows despite a recent vacuum. A
+  // high-churn table sits near one threshold between passes, so the
+  // multiplier tells the two apart. The floor keeps toy tables out.
+  const horizonBlocked =
+    deadRatio > 0.1 &&
+    snap.dead >= 10_000 &&
+    snap.dead >= 25 * threshold(snap.current, snap.live) &&
+    lastAvDays < recentWindowDays;
 
   return {
     verdict: { name: top.name, score: top.score, evidence: top.evidence },

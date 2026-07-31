@@ -21,7 +21,10 @@ export function fmtDur(days: number): string {
   if (days >= 1) return days.toFixed(1) + " d";
   const h = days * 24;
   if (h >= 1) return h.toFixed(1) + " h";
-  return (h * 60).toFixed(0) + " min";
+  const m = h * 60;
+  if (m >= 1) return m.toFixed(0) + " min";
+  // Never round a real duration to 0: a queue table vacuums in seconds.
+  return Math.max(1, Math.round(m * 60)) + " s";
 }
 
 /**

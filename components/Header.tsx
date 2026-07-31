@@ -56,6 +56,7 @@ export function Header() {
           color: C.dim,
         }}
       >
+        <Link href="/demo">/demo</Link>
         <Link href="/mcp">/mcp</Link>
         <Link href="/arcana">/arcana</Link>
       </div>

@@ -16,6 +16,7 @@ import { useClipboard, selectContents } from "@/components/useClipboard";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
 import { buildSql, OutputPanel } from "./OutputPanel";
+import { insertPeriodDays } from "@/packages/robovac-mcp/src/report";
 import { Slider } from "./Slider";
 
 const GROUPS: { id: Group; title: string; jobLine: string }[] = [
@@ -32,14 +33,24 @@ function num(text: string) {
   return <span style={{ fontFamily: MONO }}>{text}</span>;
 }
 
+const demoLinkStyle = {
+  fontFamily: MONO,
+  fontSize: 11,
+  borderBottom: "1px dotted #45454c",
+  cursor: "pointer",
+} as const;
+
 function agoLabel(snap: Snapshot): string {
   if (!snap.lastAutovacuum) return "never";
-  const ms = Date.parse(snap.capturedAt) - Date.parse(snap.lastAutovacuum);
-  const totalHours = Math.max(0, Math.floor(ms / 3600000));
+  const ms = Math.max(0, Date.parse(snap.capturedAt) - Date.parse(snap.lastAutovacuum));
+  const totalHours = Math.floor(ms / 3600000);
   const d = Math.floor(totalHours / 24);
   const h = totalHours % 24;
   if (d > 0) return `${d} d ${String(h).padStart(2, "0")} h ago`;
-  return `${h} h ago`;
+  if (totalHours > 0) return `${h} h ago`;
+  const min = Math.floor(ms / 60000);
+  if (min > 0) return `${min} min ago`;
+  return `${Math.max(1, Math.round(ms / 1000))} s ago`;
 }
 
 function snapshotLabel(snap: Snapshot): string {
@@ -145,6 +156,13 @@ export function ReportView() {
   const estimated = rState === "noisy";
   const unknownReason = rState === "reset" ? "counters reset" : "needs 2 samples";
   const small = isSmallTable(snap);
+  // On insert-heavy tables the insert trigger fires long before the
+  // dead-side one; the header cadence uses whichever comes first.
+  const insPeriod = ratesUnknown ? null : insertPeriodDays(snap);
+  const insDriven =
+    insPeriod && insPeriod.days < (Number.isFinite(periodCur) ? periodCur : Infinity)
+      ? insPeriod
+      : null;
   const ageDays = (Date.now() - Date.parse(snap.capturedAt)) / 86400000;
   const stale = ageDays > 7;
   const neverVacuumed = !snap.lastAutovacuum && !snap.lastVacuum;
@@ -230,6 +248,33 @@ export function ReportView() {
     <div
       style={{ maxWidth: 1380, margin: "0 auto", padding: mobile ? "0 16px 128px" : "0 24px 96px" }}
     >
+      {snap.demo && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "8px 16px",
+            marginTop: 16,
+            padding: "9px 12px",
+            border: `1px solid ${C.border}`,
+            background: C.panel,
+          }}
+        >
+          <span style={{ fontFamily: MONO, fontSize: 11, color: C.muted }}>
+            Demo snapshot:{" "}
+            <a href="/demo" className="term-link" style={{ color: C.strong, ...demoLinkStyle }}>
+              one of five shapes
+            </a>
+            , not your table.
+          </span>
+          <a href="/" className="term-link" style={{ ...demoLinkStyle, color: C.strong }}>
+            build one from your own table →
+          </a>
+        </div>
+      )}
+
       {/* Degraded-state notices (D1-D6): the report renders below them. */}
       {(ratesUnknown || estimated || stale || small || neverVacuumed) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 16 }}>
@@ -390,6 +435,12 @@ export function ReportView() {
                 <>
                   {num(snap.countersReset.counter)} fell between the two samples, so rates are
                   unknown. The trigger sits at {num(fmtCompact(thrCur))} dead tuples
+                </>
+              ) : insDriven ? (
+                <>
+                  Insert-driven autovacuum fires every {num(fmtDur(insDriven.days))} at the observed
+                  insert rate. The table reaches {num(fmtCompact(insDriven.threshold))} inserted
+                  rows before each run
                 </>
               ) : Number.isFinite(periodCur) && periodCur > 0 ? (
                 <>
@@ -564,6 +615,15 @@ export function ReportView() {
               {" "}
               <span style={{ color: C.strong }}>{derived.analysis.diagnosis}</span>
             </>
+          )}
+          {derived.analysis.companions.fillfactorNote && (
+            <>
+              {" "}
+              <span style={{ color: C.strong }}>{derived.analysis.companions.fillfactorNote}</span>
+            </>
+          )}
+          {derived.analysis.companions.partitionNote && (
+            <> {derived.analysis.companions.partitionNote}</>
           )}
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignSelf: "start" }}>

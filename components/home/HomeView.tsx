@@ -7,7 +7,6 @@ import { C, MONO, SANS, panel, primaryButton, secondaryButton } from "@/componen
 import { selectContents, useClipboard } from "@/components/useClipboard";
 import { useViewport } from "@/components/useViewport";
 import { encodeReport } from "@/lib/core/codec";
-import { DEMO_SNAPSHOT } from "@/lib/core/fixtures";
 import { classifyPaste, type PastedRow, type PasteError } from "@/lib/core/parse";
 import { SETTINGS } from "@/lib/core/settings";
 import { TERMS } from "@/lib/terms";
@@ -16,10 +15,6 @@ import { buildSnapshot } from "@/packages/robovac-mcp/src/report";
 
 // The generated SQL aligns its AS clauses with wide whitespace; collapse it so
 // the narrow homepage column shows one select item per line.
-function openDemo() {
-  window.location.href = `/report#${encodeReport({ snap: DEMO_SNAPSHOT })}`;
-}
-
 const QUERY = snapshotSql("schema", "table")
   .trim()
   .split("\n")
@@ -407,8 +402,8 @@ export function HomeView() {
               >
                 → build the report
               </button>
-              <span
-                onClick={openDemo}
+              <a
+                href="/demo"
                 style={{
                   fontFamily: MONO,
                   fontSize: 12,
@@ -418,7 +413,7 @@ export function HomeView() {
                 }}
               >
                 or open a demo report
-              </span>
+              </a>
             </div>
             {feedbackLines && (
               <div style={{ padding: "0 12px 12px" }}>

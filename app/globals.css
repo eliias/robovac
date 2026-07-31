@@ -100,6 +100,15 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.demo-card:hover {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.demo-card-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) auto;
+}
+
 @media (max-width: 719px) {
   .m-hide {
     display: none !important;
@@ -126,6 +135,10 @@ button {
   }
 
   .cards-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .demo-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1,12 +1,13 @@
 import { requestOrigin } from "@/lib/origin";
 import { TERMS } from "@/lib/terms";
 
-// The indexable surface: the three public pages and the built explain pages.
+// The indexable surface: the four public pages and the built explain pages.
 // The report route is deliberately absent (noindex, fragment-only payload).
 export async function GET() {
   const origin = await requestOrigin();
   const paths = [
     "/",
+    "/demo",
     "/mcp",
     "/arcana",
     ...TERMS.filter((t) => t.built).map((t) => `/explain/${t.slug}`),

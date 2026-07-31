@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { C, MONO, SANS, secondaryButton } from "@/components/ui";
-import { suggestTerms } from "@/lib/terms";
+import { TERMS, suggestTerms } from "@/lib/terms";
 
 // N1: a wrong term is a search, not a dead end. The middleware passes the
 // requested path as a header, because a not-found boundary has no params.
@@ -36,8 +36,9 @@ export default async function TermNotFound() {
             color: C.muted,
           }}
         >
-          There are 34 terms in <span style={{ fontFamily: MONO, color: C.strong }}>/arcana</span>.
-          These three are closest to what you asked for:
+          There are {TERMS.filter((t) => t.built).length} terms in{" "}
+          <span style={{ fontFamily: MONO, color: C.strong }}>/arcana</span>. These three are
+          closest to what you asked for:
         </p>
         <div style={{ marginTop: 14, border: `1px solid ${C.border}` }}>
           {suggestions.map((t) => (
@@ -67,7 +68,7 @@ export default async function TermNotFound() {
             className="btn-secondary"
             style={{ ...secondaryButton, display: "inline-block", textDecoration: "none" }}
           >
-            browse all 34 →
+            browse all {TERMS.filter((t) => t.built).length} →
           </Link>
         </div>
       </div>

@@ -140,3 +140,22 @@ describe("degraded-state detection", () => {
     expect(buildSnapshot(row(), second).lastVacuum).toBeNull();
   });
 });
+
+describe("insert-driven verdict", () => {
+  it("uses the insert cadence when it fires sooner than the dead side", () => {
+    // Append-only: 61M inserts/day against a 381M-row insert threshold,
+    // nearly no dead rows. The dead-side cadence would read as decades.
+    const second = row({
+      captured_at: "2026-07-30T12:01:00+00:00",
+      n_live_tup: "1904118400",
+      n_dead_tup: "41022",
+      n_tup_ins: "1002542000",
+      n_tup_upd: "5000100",
+    });
+    const snap = buildSnapshot(
+      row({ n_live_tup: "1904118400", n_dead_tup: "41000", n_tup_ins: "1000000000" }),
+      second,
+    );
+    expect(verdict(snap)).toMatch(/^Insert-driven autovacuum fires every/);
+  });
+});

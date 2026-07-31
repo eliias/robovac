@@ -47,6 +47,8 @@ export interface Snapshot {
   lastVacuum?: string | null;
   /** reloptions carry autovacuum_enabled=false. */
   autovacuumOff?: boolean;
+  /** One of the five /demo shapes, not a real table. The report says so. */
+  demo?: true;
   hints?: Hints;
 }
 
@@ -139,6 +141,7 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
       .optional(),
     lastVacuum: z.string().nullable().optional(),
     autovacuumOff: z.boolean().optional(),
+    demo: z.literal(true).optional(),
     hints: z
       .object({
         pattern: z

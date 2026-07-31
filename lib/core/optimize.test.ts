@@ -331,10 +331,12 @@ describe("horizon-blocked overlay", () => {
   });
 
   it("returns a diagnosis and keeps every setting", () => {
+    // 30x the trigger threshold in dead rows, vacuumed an hour ago:
+    // removal is blocked, not lagging.
     const r = optimize(
       stats({
         live: 1_000_000,
-        dead: 200_000,
+        dead: 6_000_000,
         deadPerDay: 1_000_000,
         lastAutovacuum: "2026-07-30T11:00:00Z",
         capturedAt: "2026-07-30T12:00:00Z",
@@ -343,6 +345,24 @@ describe("horizon-blocked overlay", () => {
     expect(r.diagnosis).toMatch(/xmin horizon/);
     expect(r.values).toEqual(defaultValues());
     expect(Object.keys(r.reasons)).toHaveLength(0);
+  });
+
+  it("does not diagnose a high-churn table that holds a few cadences of dead rows", () => {
+    // 33% dead on a churner vacuumed minutes ago reads as bloat (think
+    // fillfactor), not as a pinned horizon: it holds ~10 thresholds, not 25+.
+    const r = optimize(
+      stats({
+        live: 18_402_211,
+        dead: 9_104_118,
+        pages: 1_180_000,
+        deadPerDay: 41_220_000,
+        insPerDay: 6_000_000,
+        current: { ...defaultValues(), autovacuum_vacuum_scale_factor: 0.05 },
+        lastAutovacuum: "2026-07-30T11:49:00Z",
+        capturedAt: "2026-07-30T12:00:00Z",
+      }),
+    );
+    expect(r.diagnosis).toBeUndefined();
   });
 });
 

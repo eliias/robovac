@@ -78,6 +78,17 @@ function fmtLong(v: number): string {
   return v.toLocaleString("en-US");
 }
 
+/** The insert-trigger cadence (PG13+), or null when it never fires. */
+export function insertPeriodDays(snap: Snapshot): { days: number; threshold: number } | null {
+  if ((snap.versionNum ?? 0) < 130_000) return null;
+  const insPerDay = snap.insPerDay ?? 0;
+  if (insPerDay <= 0) return null;
+  const thr =
+    snap.current.autovacuum_vacuum_insert_threshold +
+    snap.current.autovacuum_vacuum_insert_scale_factor * snap.live;
+  return { days: thr / insPerDay, threshold: thr };
+}
+
 function deadDelta(row: Row): number {
   return num(row, "n_tup_upd") - num(row, "n_tup_hot_upd") + num(row, "n_tup_del");
 }
@@ -167,6 +178,16 @@ export function verdict(snap: Snapshot): string {
   const tail = aggressive
     ? ", and relfrozenxid age is past autovacuum_freeze_max_age, so every run is aggressive."
     : ".";
+  // On an insert-heavy table the insert trigger (PG13+) fires long before
+  // the dead-side one; a dead-side-only cadence would read as decades.
+  const ins = insertPeriodDays(snap);
+  const deadPeriod = snap.deadPerDay > 0 ? thr / snap.deadPerDay : Infinity;
+  if (ins !== null && ins.days < deadPeriod) {
+    return (
+      `Insert-driven autovacuum fires every ${fmtDur(ins.days)} at the observed insert rate. ` +
+      `The table reaches ${fmtCompact(ins.threshold)} inserted rows before each run${tail}`
+    );
+  }
   if (snap.deadPerDay > 0) {
     return (
       `Autovacuum fires every ${fmtDur(thr / snap.deadPerDay)} at the observed write rate. ` +
