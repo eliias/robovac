@@ -59,6 +59,7 @@ export function Header() {
         <Link href="/demo">/demo</Link>
         <Link href="/mcp">/mcp</Link>
         <Link href="/arcana">/arcana</Link>
+        <Link href="/changelog">/changelog</Link>
       </div>
     </div>
   );

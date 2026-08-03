@@ -1,0 +1,194 @@
+[
+  {
+    "hash": "22a233f",
+    "date": "2026-08-03",
+    "type": "fix",
+    "scope": "tuner",
+    "breaking": false,
+    "description": "correct vacuum recipes against production evidence"
+  },
+  {
+    "hash": "c70f186",
+    "date": "2026-08-03",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "cookieless matomo visitor and referral tracking"
+  },
+  {
+    "hash": "6c98c5c",
+    "date": "2026-07-31",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "/demo, five tables from the design handoff"
+  },
+  {
+    "hash": "2fd3462",
+    "date": "2026-07-31",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "the 18 error and empty states from the design handoff"
+  },
+  {
+    "hash": "ac53767",
+    "date": "2026-07-31",
+    "type": "feat",
+    "scope": "core",
+    "breaking": false,
+    "description": "price vacuum passes by pages of work, not heap size"
+  },
+  {
+    "hash": "2616534",
+    "date": "2026-07-31",
+    "type": "fix",
+    "scope": "core",
+    "breaking": false,
+    "description": "keep the freeze chain ordered and warn on vacuum overload"
+  },
+  {
+    "hash": "12fde13",
+    "date": "2026-07-31",
+    "type": "fix",
+    "scope": "report",
+    "breaking": false,
+    "description": "tell a measured zero write rate from a single sample"
+  },
+  {
+    "hash": "b16385e",
+    "date": "2026-07-31",
+    "type": "fix",
+    "scope": "seo",
+    "breaking": false,
+    "description": "complete social cards on every route"
+  },
+  {
+    "hash": "dea13e9",
+    "date": "2026-07-31",
+    "type": "fix",
+    "scope": "core",
+    "breaking": false,
+    "description": "accept current settings in the full Postgres range"
+  },
+  {
+    "hash": "6590352",
+    "date": "2026-07-31",
+    "type": "feat",
+    "scope": "mcp",
+    "breaking": false,
+    "description": "serve the protocol on /mcp"
+  },
+  {
+    "hash": "6434506",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "arcana",
+    "breaking": false,
+    "description": "every term gets a page, 34 in total"
+  },
+  {
+    "hash": "812ed90",
+    "date": "2026-07-30",
+    "type": "fix",
+    "scope": null,
+    "breaking": false,
+    "description": "drop the homepage header chip"
+  },
+  {
+    "hash": "abb4e8f",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "homepage, and no more placeholder data"
+  },
+  {
+    "hash": "1927309",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "reland social/seo and the public mcp endpoint"
+  },
+  {
+    "hash": "c512955",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "mobile mode from the mobile handoff"
+  },
+  {
+    "hash": "5619502",
+    "date": "2026-07-30",
+    "type": "fix",
+    "scope": "mcp",
+    "breaking": true,
+    "description": "no database access, no environment variables"
+  },
+  {
+    "hash": "96fbd15",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "jenkins deploy pipeline and brand rollout"
+  },
+  {
+    "hash": "5dc1c62",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "mcp",
+    "breaking": false,
+    "description": "robovac-mcp stdio server"
+  },
+  {
+    "hash": "e88a5a9",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "llms.txt for agent discovery"
+  },
+  {
+    "hash": "a1ee03e",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "pages",
+    "breaking": false,
+    "description": "explain, arcana, mcp"
+  },
+  {
+    "hash": "637fc7a",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "report",
+    "breaking": false,
+    "description": "report page with sliders, figures, sql output"
+  },
+  {
+    "hash": "28b24c0",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "core",
+    "breaking": false,
+    "description": "cadence-first pattern-based optimizer"
+  },
+  {
+    "hash": "950fa7e",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": "core",
+    "breaking": false,
+    "description": "settings inventory, snapshot schema, model, url codec"
+  },
+  {
+    "hash": "9b75b43",
+    "date": "2026-07-30",
+    "type": "feat",
+    "scope": null,
+    "breaking": false,
+    "description": "scaffold next app with global header"
+  }
+]
