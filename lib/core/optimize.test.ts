@@ -120,6 +120,44 @@ describe("classify + solve: patterns", () => {
     expect(r.values.autovacuum_vacuum_scale_factor).toBe(cur.autovacuum_vacuum_scale_factor);
   });
 
+  it("keeps analyze settings on stable tables", () => {
+    // Analyze re-samples the same fixed number of rows each run; on a
+    // stable distribution more runs buy nothing and re-roll plans.
+    const r = optimize(demoStats);
+    expect(r.values.autovacuum_analyze_scale_factor).toBe(
+      demoStats.current.autovacuum_analyze_scale_factor,
+    );
+    expect(r.values.autovacuum_analyze_threshold).toBe(
+      demoStats.current.autovacuum_analyze_threshold,
+    );
+  });
+
+  it("partitions get the static analyze trigger", () => {
+    const r = optimize(stats({ isPartition: true }));
+    expect(r.values.autovacuum_analyze_scale_factor).toBe(0);
+  });
+
+  it("keeps freeze_min_age under one vacuum interval in xids", () => {
+    // A cutoff past the interval leaves pages all-visible but unfrozen;
+    // only the aggressive vacuum would ever freeze them.
+    const r = optimize(stats({ xidPerDay: 50_000_000 }));
+    const cadenceDays = threshold(r.values, 1_000_000) / 100_000;
+    expect(r.values.vacuum_freeze_min_age).toBeLessThanOrEqual(cadenceDays * 50_000_000);
+  });
+
+  it("diagnoses a lowered freeze_max_age as a forced-vacuum loop", () => {
+    // The lowered-reloption pathology: a 4M reloption sits under the ordinary
+    // xmin-horizon age, so the forced vacuum re-fires every naptime.
+    const r = optimize(
+      stats({
+        xidAge: 25_000_000,
+        current: { ...defaultValues(), autovacuum_freeze_max_age: 4_000_000 },
+      }),
+    );
+    expect(r.warnings.join(" ")).toMatch(/every naptime/);
+    expect(r.values.autovacuum_freeze_max_age).toBeGreaterThanOrEqual(200_000_000);
+  });
+
   it("a pattern hint overrides the classifier", () => {
     const r = optimize(stats({ hints: { pattern: "queue" } }));
     expect(r.pattern.name).toBe("queue");
@@ -367,9 +405,28 @@ describe("horizon-blocked overlay", () => {
 });
 
 describe("companions", () => {
-  it("emits a toast block when the table has TOAST", () => {
+  it("emits a toast block that follows the heap threshold", () => {
     const r = optimize({ ...demoStats, hasToast: true });
-    expect(r.companions.toastSql).toMatch(/toast\.autovacuum_vacuum_threshold = 10000/);
+    expect(r.companions.toastSql).toContain(
+      `toast.autovacuum_vacuum_threshold = ${r.values.autovacuum_vacuum_threshold}`,
+    );
+  });
+
+  it("keeps the toast threshold at 100k when the heap threshold is smaller", () => {
+    // The not-removable floor on a busy TOAST table sits far above a small
+    // heap threshold; a toast threshold under it loops every naptime.
+    const r = optimize(
+      stats({
+        live: 200_000,
+        dead: 50_000,
+        pages: 20_000,
+        deadPerDay: 2_000_000,
+        lastAutovacuum: null,
+        hasToast: true,
+      }),
+    );
+    expect(r.values.autovacuum_vacuum_threshold).toBeLessThan(100_000);
+    expect(r.companions.toastSql).toMatch(/toast\.autovacuum_vacuum_threshold = 100000/);
   });
 
   it("suggests fillfactor when HOT fraction is low on update-heavy tables", () => {

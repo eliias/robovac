@@ -205,24 +205,22 @@ function solve(
       scale === 0
         ? "Zero decouples the trigger from table size; the fixed threshold carries the cadence."
         : "A small factor keeps the trigger scaling while the table is still small.";
+  }
 
-    // Analyze at twice the vacuum cadence, static on queue tables and partitions.
-    const ta = 2 * tv;
-    const analyzeWanted = clampToDef(
+  // Analyze only where the data's shape changes fast: queue tables turn
+  // their content over, partitions fill from empty. A stable distribution
+  // gains nothing from more analyze runs: each run re-samples the same
+  // fixed number of rows (no incremental mode) and re-rolls plans that sit
+  // on knife-edge costs, so stable tables keep their current settings.
+  if ((pattern === "queue" || snap.isPartition) && pattern !== "cold" && rates.modPerDay > 0) {
+    values.autovacuum_analyze_threshold = clampToDef(
       "autovacuum_analyze_threshold",
-      roundHuman(Math.max(1000, rates.modPerDay * ta)),
+      roundHuman(Math.max(1000, rates.modPerDay * 2 * tv)),
     );
-    values.autovacuum_analyze_threshold = analyzeWanted;
-    values.autovacuum_analyze_scale_factor = clampToDef(
-      "autovacuum_analyze_scale_factor",
-      pattern === "queue" || snap.isPartition ? 0 : snap.live >= 5_000_000 ? 0 : 0.02,
-    );
+    values.autovacuum_analyze_scale_factor = clampToDef("autovacuum_analyze_scale_factor", 0);
     reasons.autovacuum_analyze_threshold =
-      "Twice the vacuum cadence; planner statistics tolerate a little more lag.";
-    if (values.autovacuum_analyze_scale_factor === 0) {
-      reasons.autovacuum_analyze_scale_factor =
-        "Static analyze trigger: stale statistics on high-churn tables and partitions break plans (partition pruning included).";
-    }
+      "Twice the vacuum cadence: this table's shape changes fast, and stale statistics break plans (partition pruning included).";
+    reasons.autovacuum_analyze_scale_factor = "Static analyze trigger, decoupled from table size.";
   }
 
   // Triggers (insert side, PG13+).
@@ -245,14 +243,17 @@ function solve(
     );
   }
 
-  // Freeze chain, all in time units.
+  // Freeze chain, all in time units. The cutoff must stay under one vacuum
+  // interval in xids: a page whose rows are all younger goes all-visible
+  // unfrozen, later normal vacuums skip it, and only the aggressive pass
+  // ever freezes it.
   if (Number.isFinite(cadenceDays) && cadenceDays > 0) {
     values.vacuum_freeze_min_age = clampToDef(
       "vacuum_freeze_min_age",
-      clamp(roundHuman(2 * cadenceDays * rates.xidPerDay), 1_000_000, 50_000_000),
+      clamp(roundHuman(0.5 * cadenceDays * rates.xidPerDay), 1_000_000, 50_000_000),
     );
     reasons.vacuum_freeze_min_age =
-      "Two vacuum intervals worth of xids: younger than that and normal vacuums would never freeze a page.";
+      "Half a vacuum interval of xids. A cutoff past one interval leaves pages all-visible but unfrozen, and only the aggressive vacuum ever freezes them.";
   }
 
   let freezeMax = clamp(roundHuman(60 * rates.xidPerDay), 200_000_000, 1_000_000_000);
@@ -485,10 +486,16 @@ function buildCompanions(snap: SnapshotStats, values: Values, cls: Classificatio
   }
   const companions: Companions = { clusterAdvice: advice };
   if (snap.hasToast) {
+    // TOAST churns at the heap's row churn times chunks per row, and its
+    // dead-but-not-removable floor (churn x snapshot-horizon age) can sit
+    // in the hundreds of thousands. A fixed low threshold under that floor
+    // re-triggers a useless vacuum every naptime, so TOAST follows the
+    // heap threshold with a 100k floor.
+    const toastThreshold = Math.max(100_000, values.autovacuum_vacuum_threshold);
     companions.toastSql =
       `ALTER TABLE ${snap.table} SET (\n` +
       `  toast.autovacuum_vacuum_scale_factor = 0,\n` +
-      `  toast.autovacuum_vacuum_threshold = 10000,\n` +
+      `  toast.autovacuum_vacuum_threshold = ${toastThreshold},\n` +
       `  toast.autovacuum_vacuum_cost_limit = ${values.autovacuum_vacuum_cost_limit},\n` +
       `  toast.autovacuum_freeze_min_age = 1000000\n` +
       `);`;
@@ -515,9 +522,19 @@ export function optimize(snap: SnapshotStats): OptimizeResult {
 
   if (cls.emergency) {
     if (snap.xidAge > snap.current.autovacuum_freeze_max_age) {
-      warnings.push(
-        "relfrozenxid age is past autovacuum_freeze_max_age: the forced anti-wraparound vacuum runs now and does not yield to lock waiters.",
-      );
+      // A reloption far below the default is a lowered deadline, not real
+      // wraparound risk. The xmin horizon keeps relfrozenxid a few million
+      // xids old at all times, so a limit under that age can never be
+      // satisfied and the forced vacuum re-fires every naptime, forever.
+      if (snap.current.autovacuum_freeze_max_age < 100_000_000) {
+        warnings.push(
+          "autovacuum_freeze_max_age is lowered below the age the xmin horizon allows. The table can never get back under the limit, so a forced anti-wraparound vacuum starts every naptime, forever. This setting is the deadline knob, not the eagerness knob: RESET it and lower vacuum_freeze_min_age to freeze earlier.",
+        );
+      } else {
+        warnings.push(
+          "relfrozenxid age is past autovacuum_freeze_max_age: the forced anti-wraparound vacuum runs now and does not yield to lock waiters.",
+        );
+      }
     }
     const margin = shutdownMarginDays(snap.xidAge, snap.xidPerDay);
     if (margin < 30) {

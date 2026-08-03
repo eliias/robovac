@@ -381,7 +381,8 @@ export const CONTENT: Record<string, ExplainContent> = {
         50M). The trap is that the setting is in xids but the vacuum cadence is in time: if 50M xids
         take longer to burn than the interval between vacuums, no row is ever old enough when the
         vacuum arrives, nothing freezes, and all freeze work piles up for the aggressive pass. The
-        rule from production tuning: keep it shorter, in time, than a couple of vacuum intervals.
+        rule from production tuning: keep it shorter, in time, than one vacuum interval, because a
+        page that goes all-visible unfrozen is skipped by every later normal vacuum.
       </>
     ),
     seeAlso: ["freeze", "vacuum_freeze_table_age", "autovacuum_vacuum_insert_threshold"],

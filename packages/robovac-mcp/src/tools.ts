@@ -14,7 +14,18 @@ const DEFAULT_BASE_URL = "https://robovac.hannesmoser.at";
 const SNAPSHOT_INSTRUCTIONS =
   "Run this read-only query on your own database connection twice, 30-60 seconds apart " +
   "(a role in pg_monitor is enough). Then call create_report with both result rows as " +
-  "first and second. The delay is what turns counters into rates, so do not skip it.";
+  "first and second. The delay is what turns counters into rates, so do not skip it. " +
+  "Connect to the primary: replicas keep their own pg_stat_user_tables counters, which " +
+  "read as zero or null there.";
+
+/** What to expect when the agent applies the proposed settings. */
+function applyNotes(table: string): string[] {
+  return [
+    `ALTER TABLE ... SET takes a SHARE UPDATE EXCLUSIVE lock. It does not block queries, but it queues behind a running anti-wraparound vacuum, and a lock_timeout can kill it silently. Verify after the apply: SELECT reloptions FROM pg_class WHERE oid = '${table}'::regclass;`,
+    "Expect one catch-up vacuum right after the apply. Near-free runs can then re-trigger every naptime while dead-but-not-removable rows drain; the catch-up run held the xmin horizon open, so this loop is a transient. A loop that persists for hours means the threshold sits under the standing floor (churn times snapshot-horizon age): raise the threshold.",
+    "Reloptions do not survive a table rewrite (pg_repack, pg-osc): re-apply after one.",
+  ];
+}
 
 function json(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
@@ -117,6 +128,7 @@ export function registerTools(server: McpServer): void {
         proposed: proposal.values,
         reasons: proposal.reasons,
         companions: proposal.companions,
+        apply_notes: applyNotes(snap.table),
       });
     },
   );
