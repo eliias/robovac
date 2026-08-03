@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { requestOrigin } from "@/lib/origin";
 import { Header } from "@/components/Header";
+import { Matomo } from "@/components/Matomo";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           {children}
         </div>
+        <Matomo />
       </body>
     </html>
   );
