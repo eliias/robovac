@@ -121,6 +121,8 @@ export function registerTools(server: McpServer): void {
       const url = `${base_url ?? DEFAULT_BASE_URL}/report#${encodeReport({ snap })}`;
       return json({
         url,
+        url_note:
+          "Relay this URL by copy, never by re-typing it: one changed character makes the link unusable, and the report page rejects it as damaged.",
         verdict: verdict(snap),
         pattern: proposal.pattern,
         warnings: proposal.warnings,

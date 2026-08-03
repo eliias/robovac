@@ -6,9 +6,9 @@ import { selectContents, useClipboard } from "@/components/useClipboard";
 import type { CodecError } from "@/lib/core/codec";
 
 /**
- * The four blocked states (B1-B4): no report is possible, so the page says
+ * The five blocked states (B1-B5): no report is possible, so the page says
  * what arrived, what was expected, the likely cause, and one way forward.
- * Neutral for the empty link (nothing failed), warn for the other three.
+ * Neutral for the empty link (nothing failed), warn for the other four.
  */
 
 function Eyebrow({ label, warn }: { label: string; warn: boolean }) {
@@ -171,14 +171,39 @@ function TruncatedState({ error }: { error: CodecError }) {
   );
 }
 
+function DamagedState({ error }: { error: CodecError }) {
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <Eyebrow label="LINK DAMAGED" warn />
+      <Title>This link was changed on its way here.</Title>
+      <Body>
+        The fragment has the right length ({error.expected ?? error.received} bytes), but its
+        checksum does not match: one or more characters differ from what the encoder produced. The
+        usual cause is a re-typed URL, an agent transcribing the link into a reply instead of
+        copying it. A changed character can still decode into a report with wrong numbers, so
+        robovac refuses to render it.
+      </Body>
+      <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
+        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+          → build a fresh report
+        </a>
+      </div>
+      <Footer>
+        Copy the URL again from where it was made, character for character. The copy button on the
+        report and the url field in the MCP result both carry the exact link.
+      </Footer>
+    </div>
+  );
+}
+
 function VersionState({ error }: { error: CodecError }) {
   return (
     <div style={{ maxWidth: 640 }}>
       <Eyebrow label="LINK OUTDATED" warn />
       <Title>This link was built by a different robovac.</Title>
       <Body>
-        {error.issues[0]}. This build reads versions 1 and 2. A report is a set of numbers people
-        act on, so robovac refuses to render one that would be missing parts of itself.
+        {error.issues[0]}. This build reads versions 1 through 3. A report is a set of numbers
+        people act on, so robovac refuses to render one that would be missing parts of itself.
       </Body>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
         <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
@@ -289,7 +314,11 @@ function InvalidState({ error }: { error: CodecError }) {
           {error.payloadText}
         </pre>
       )}
-      <Footer>Ranges are validated on decode, not at first use.</Footer>
+      <Footer>
+        Ranges are validated on decode, not at first use. Links older than codec v3 carry no
+        checksum, so a character changed in transit (a re-typed URL) can also land here: if the
+        payload looks garbled rather than wrong, copy the URL again from where it was made.
+      </Footer>
     </div>
   );
 }
@@ -301,6 +330,7 @@ export function ErrorState({ error }: { error: CodecError }) {
       <div style={{ marginTop: 18 }}>
         {error.kind === "empty" && <EmptyState />}
         {error.kind === "truncated" && <TruncatedState error={error} />}
+        {error.kind === "damaged" && <DamagedState error={error} />}
         {error.kind === "version" && <VersionState error={error} />}
         {error.kind === "invalid" && <InvalidState error={error} />}
       </div>

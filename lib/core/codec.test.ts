@@ -141,8 +141,35 @@ describe("codec error kinds", () => {
   });
 
   it("still decodes a v1 link", () => {
-    const v2 = encodeReport({ snap: DEMO_SNAPSHOT });
-    const v1 = "1." + v2.split(".").slice(2).join(".");
-    expect(decodeReport(v1)).toEqual({ snap: DEMO_SNAPSHOT });
+    const [, , , data] = encodeReport({ snap: DEMO_SNAPSHOT }).split(".");
+    expect(decodeReport("1." + data)).toEqual({ snap: DEMO_SNAPSHOT });
+  });
+
+  it("still decodes a v2 link", () => {
+    const [, len, , data] = encodeReport({ snap: DEMO_SNAPSHOT }).split(".");
+    expect(decodeReport(`2.${len}.${data}`)).toEqual({ snap: DEMO_SNAPSHOT });
+  });
+
+  it("B5: a changed character reports kind damaged, not invalid", () => {
+    // Seen in the wild: an agent re-typed the URL into its reply with one
+    // character off. The damage decoded into valid JSON with a mangled
+    // hints key and was blamed on the payload builder.
+    const full = encodeReport({ snap: DEMO_SNAPSHOT });
+    const i = full.length - 40;
+    const flipped = full[i] === "A" ? "B" : "A";
+    const mutated = full.slice(0, i) + flipped + full.slice(i + 1);
+    try {
+      decodeReport(mutated);
+      throw new Error("expected CodecError");
+    } catch (e) {
+      expect((e as CodecError).kind).toBe("damaged");
+    }
+  });
+
+  it("decodes a v3 link with junk glued to the end", () => {
+    // Chat clients append punctuation to URLs. The length prefix says
+    // where the payload ends and the checksum proves the cut is right.
+    const full = encodeReport({ snap: DEMO_SNAPSHOT });
+    expect(decodeReport(full + ")")).toEqual({ snap: DEMO_SNAPSHOT });
   });
 });
