@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeReport } from "../../../lib/core/codec";
 import { optimize } from "../../../lib/core/optimize";
+import { SETTINGS } from "../../../lib/core/settings";
 import type { Hints } from "../../../lib/core/snapshot";
 import { TERMS, termHref } from "../../../lib/terms";
 import { candidatesSql, snapshotSql } from "./queries";
@@ -12,11 +13,14 @@ import { buildSnapshot, verdict } from "./report";
 const DEFAULT_BASE_URL = "https://robovac.hannesmoser.at";
 
 const SNAPSHOT_INSTRUCTIONS =
-  "Run this read-only query on your own database connection twice, 30-60 seconds apart " +
-  "(a role in pg_monitor is enough). Then call create_report with both result rows as " +
-  "first and second. The delay is what turns counters into rates, so do not skip it. " +
-  "Connect to the primary: replicas keep their own pg_stat_user_tables counters, which " +
-  "read as zero or null there.";
+  "Run this read-only query on your own database connection twice (a role in pg_monitor is " +
+  "enough), then call create_report with both result rows as first and second. The delay " +
+  "between the two runs is what turns counters into rates. Leave 10-15 minutes: on a bursty " +
+  "OLTP table a one-minute window measures the minute it ran in, and every proposed threshold " +
+  "derives from it, so it can miss the real rate several times over. Better still, if you " +
+  "already have hours of monitoring data, pass measured_rates to create_report and the " +
+  "sampling window stops mattering. Connect to the primary: replicas keep their own " +
+  "pg_stat_user_tables counters, which read as zero there.";
 
 /** What to expect when the agent applies the proposed settings. */
 function applyNotes(table: string): string[] {
@@ -92,6 +96,16 @@ export function registerTools(server: McpServer): void {
         .boolean()
         .optional()
         .describe("FK checks or SELECT FOR UPDATE dominate (multixact pressure)"),
+      measured_rates: z
+        .object({
+          dead_per_day: z.number().nonnegative().optional(),
+          ins_per_day: z.number().nonnegative().optional(),
+          xid_per_day: z.number().positive().optional(),
+        })
+        .optional()
+        .describe(
+          "Rates you already measured over hours (monitoring, vacuum logs). These replace the two-sample delta, which is the weakest input in the whole report on a bursty table.",
+        ),
       base_url: baseUrlInput,
     },
     async ({
@@ -104,6 +118,7 @@ export function registerTools(server: McpServer): void {
       max_workers,
       long_transactions,
       fk_heavy,
+      measured_rates,
       base_url,
     }) => {
       const provided: Hints = {
@@ -114,23 +129,36 @@ export function registerTools(server: McpServer): void {
         maxWorkers: max_workers,
         longTransactions: long_transactions,
         fkHeavy: fk_heavy,
+        measuredRates: measured_rates && {
+          deadPerDay: measured_rates.dead_per_day,
+          insPerDay: measured_rates.ins_per_day,
+          xidPerDay: measured_rates.xid_per_day,
+        },
       };
       const hints = Object.values(provided).some((v) => v !== undefined) ? provided : undefined;
       const snap = buildSnapshot(first, second, hints);
       const proposal = optimize(snap);
       const url = `${base_url ?? DEFAULT_BASE_URL}/report#${encodeReport({ snap })}`;
+      const changed = SETTINGS.map((d) => d.key).filter(
+        (key) => proposal.values[key] !== snap.current[key],
+      );
       return json({
         url,
         url_note:
           "Relay this URL by copy, never by re-typing it: one changed character makes the link unusable, and the report page rejects it as damaged.",
         verdict: verdict(snap),
         pattern: proposal.pattern,
+        // The list a reviewer reads first. An empty one is a real answer:
+        // the table is already tuned and nothing here needs an ALTER.
+        changed,
+        settled: changed.length === 0,
         warnings: proposal.warnings,
         diagnosis: proposal.diagnosis,
+        current: snap.current,
         proposed: proposal.values,
         reasons: proposal.reasons,
         companions: proposal.companions,
-        apply_notes: applyNotes(snap.table),
+        apply_notes: changed.length > 0 ? applyNotes(snap.table) : [],
       });
     },
   );

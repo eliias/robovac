@@ -10,6 +10,7 @@ import {
   sawPath,
   shutdownMarginDays,
   threshold,
+  triggerRows,
 } from "@/lib/core/model";
 import type { Values } from "@/lib/core/settings";
 import { hasMeasuredRate, rateState, type Snapshot } from "@/lib/core/snapshot";
@@ -62,8 +63,8 @@ function TwoCellStrip({ cells }: { cells: { label: string; value: string; color?
 }
 
 export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values }) {
-  const thrCur = threshold(snap.current, snap.live);
-  const thrLive = threshold(values, snap.live);
+  const thrCur = threshold(snap.current, triggerRows(snap));
+  const thrLive = threshold(values, triggerRows(snap));
   const zeroPeriod = hasMeasuredRate(snap) ? "no writes" : "unknown · one sample";
   const yMax = Math.max(thrCur, thrLive);
   const W = 496;

@@ -2,8 +2,30 @@ import type { Values } from "./settings";
 
 export const WRAP = 2147483647;
 
-export function threshold(values: Values, live: number): number {
-  return values.autovacuum_vacuum_threshold + values.autovacuum_vacuum_scale_factor * live;
+/**
+ * The row count autovacuum multiplies by the scale factor. Autovacuum reads
+ * pg_class.reltuples, not the n_live_tup statistics estimate, and the two
+ * drift apart on a table whose analyze is behind. Every trigger calculation
+ * goes through here so the choice lives in one place.
+ */
+export function triggerRows(snap: { live: number; relTuples?: number }): number {
+  // Postgres 14+ reports reltuples = -1 for a relation it has never
+  // vacuumed or analyzed, which means "unknown", not "empty".
+  const rt = snap.relTuples;
+  return rt !== undefined && rt >= 0 ? rt : snap.live;
+}
+
+/** How far apart the two row counts are, as a ratio at or above 1. */
+export function rowCountDrift(snap: { live: number; relTuples?: number }): number {
+  const rt = snap.relTuples;
+  if (rt === undefined || rt < 0) return 1;
+  const a = Math.max(1, snap.live);
+  const b = Math.max(1, rt);
+  return Math.max(a, b) / Math.min(a, b);
+}
+
+export function threshold(values: Values, rows: number): number {
+  return values.autovacuum_vacuum_threshold + values.autovacuum_vacuum_scale_factor * rows;
 }
 
 export interface RunCost {

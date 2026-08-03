@@ -432,15 +432,17 @@ export const CONTENT: Record<string, ExplainContent> = {
         falls more than 2^31 transactions behind the current xid would appear to be in the future,
         so Postgres must mark old rows frozen before that happens. {m("autovacuum_freeze_max_age")}{" "}
         is the table age at which autovacuum stops being optional: a worker is launched even if the
-        table is otherwise idle and autovacuum is switched off. Setting it low means frequent
-        aggressive scans; setting it high means fewer, larger ones and less margin before the 2^31
-        limit forces the cluster read-only.
+        table is otherwise idle and autovacuum is switched off. It is a deadline, not a schedule. On
+        a table that vacuums normally, {m("vacuum_freeze_table_age")} escalation rides one of those
+        runs and advances {m("relfrozenxid")} first, so this deadline never arrives and the value it
+        holds stops mattering. That is why the default is usually the right answer: raising it only
+        shortens the margin before the 2^31 limit forces the cluster read-only.
       </>
     ),
     Demo: FreezeDemo,
     seeAlso: ["aggressive-vacuum", "vacuum_failsafe_age", "wraparound"],
     footnote:
-      "Raising it above ~400M is only safe while eager freezing keeps age(relfrozenxid) flat. A very high value also delays the day a latent bug detonates, and the blast radius grows with it.",
+      "Lowering it to freeze sooner is the classic trap: below the age the xmin horizon allows, the table can never get back under the limit and a forced vacuum starts every naptime, forever. vacuum_freeze_min_age is the eagerness knob.",
   },
   wraparound: {
     definition: (

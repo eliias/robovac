@@ -7,7 +7,7 @@ import { useViewport } from "@/components/useViewport";
 import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
 import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
 import { fmtCadence, fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
-import { passPages, runCost, threshold } from "@/lib/core/model";
+import { passPages, runCost, threshold, triggerRows } from "@/lib/core/model";
 import { optimize } from "@/lib/core/optimize";
 import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
 import { hasMeasuredRate, isSmallTable, rateState, type Snapshot } from "@/lib/core/snapshot";
@@ -16,7 +16,7 @@ import { useClipboard, selectContents } from "@/components/useClipboard";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
 import { buildSql, OutputPanel } from "./OutputPanel";
-import { insertPeriodDays } from "@/packages/robovac-mcp/src/report";
+import { bindingTrigger, insertPeriodDays } from "@/packages/robovac-mcp/src/report";
 import { Slider } from "./Slider";
 
 const GROUPS: { id: Group; title: string; jobLine: string }[] = [
@@ -123,8 +123,8 @@ export function ReportView() {
   const derived = useMemo(() => {
     if (!payload || !values) return null;
     const snap = payload.snap;
-    const thrCur = threshold(snap.current, snap.live);
-    const thrLive = threshold(values, snap.live);
+    const thrCur = threshold(snap.current, triggerRows(snap));
+    const thrLive = threshold(values, triggerRows(snap));
     return {
       snap,
       thrCur,
@@ -163,6 +163,14 @@ export function ReportView() {
     insPeriod && insPeriod.days < (Number.isFinite(periodCur) ? periodCur : Infinity)
       ? insPeriod
       : null;
+  // The same reading for the values on the sliders right now. Silent while
+  // they still match what runs today, which is not news.
+  const sliderCadence = ratesUnknown ? null : bindingTrigger(snap, values);
+  const currentCadence = ratesUnknown ? null : bindingTrigger(snap);
+  const proposedCadence =
+    sliderCadence && currentCadence && sliderCadence.days !== currentCadence.days
+      ? sliderCadence
+      : null;
   const ageDays = (Date.now() - Date.parse(snap.capturedAt)) / 86400000;
   const stale = ageDays > 7;
   const neverVacuumed = !snap.lastAutovacuum && !snap.lastVacuum;
@@ -177,7 +185,7 @@ export function ReportView() {
 
   const note = (key: string): string => {
     if (key === "autovacuum_vacuum_scale_factor") {
-      return `${fmtCompact(threshold(snap.proposed, snap.live))} dead rows at trigger`;
+      return `${fmtCompact(threshold(snap.proposed, triggerRows(snap)))} dead rows at trigger`;
     }
     if (key === "autovacuum_freeze_max_age" && snap.xidAge > values.autovacuum_freeze_max_age) {
       return "currently exceeded";
@@ -468,6 +476,11 @@ export function ReportView() {
               ) : (
                 "."
               )}
+              {/* The number a reviewer actually compares against: what the
+                  sliders below produce, next to what runs today. */}
+              {proposedCadence !== null && (
+                <> The settings below fire it every {num(fmtDur(proposedCadence.days))}.</>
+              )}
             </p>
           </div>
           {derived.analysis.warnings.length > 0 && (
@@ -604,8 +617,8 @@ export function ReportView() {
           {snap.deadPerDay > 0 ? (
             <>
               Proposed settings below fire vacuum every{" "}
-              {fmtDur(threshold(snap.proposed, snap.live) / snap.deadPerDay)} and move the freeze
-              work off the wraparound path.
+              {fmtDur(threshold(snap.proposed, triggerRows(snap)) / snap.deadPerDay)} and move the
+              freeze work off the wraparound path.
             </>
           ) : (
             <>Proposed settings below move the freeze work off the wraparound path.</>
@@ -624,6 +637,12 @@ export function ReportView() {
           )}
           {derived.analysis.companions.partitionNote && (
             <> {derived.analysis.companions.partitionNote}</>
+          )}
+          {derived.analysis.companions.indexBypassNote && (
+            <> {derived.analysis.companions.indexBypassNote}</>
+          )}
+          {derived.analysis.companions.analyzeNote && (
+            <> {derived.analysis.companions.analyzeNote}</>
           )}
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignSelf: "start" }}>

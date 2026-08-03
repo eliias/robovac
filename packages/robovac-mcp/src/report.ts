@@ -1,5 +1,5 @@
 import { fmtCompact, fmtDur, fmtSecs } from "../../../lib/core/format";
-import { threshold } from "../../../lib/core/model";
+import { threshold, triggerRows } from "../../../lib/core/model";
 import { optimize } from "../../../lib/core/optimize";
 import { SETTINGS, defaultValues, type Values } from "../../../lib/core/settings";
 import {
@@ -43,6 +43,14 @@ function reloptionsList(row: Row): string[] {
     .filter(Boolean);
 }
 
+/** The widest horizon anything holds: running transactions or a stuck slot. */
+function horizonXids(row: Row): number | undefined {
+  const snapshot = optNum(row, "horizon_xids");
+  const slot = optNum(row, "slot_horizon_xids");
+  if (snapshot === undefined && slot === undefined) return undefined;
+  return Math.max(0, snapshot ?? 0, slot ?? 0);
+}
+
 function globalSettings(row: Row): Map<string, string> {
   const v = row.global_settings;
   const obj = typeof v === "string" ? JSON.parse(v) : v;
@@ -79,14 +87,33 @@ function fmtLong(v: number): string {
 }
 
 /** The insert-trigger cadence (PG13+), or null when it never fires. */
-export function insertPeriodDays(snap: Snapshot): { days: number; threshold: number } | null {
+export function insertPeriodDays(
+  snap: Snapshot,
+  values: Values = snap.current,
+): { days: number; threshold: number } | null {
   if ((snap.versionNum ?? 0) < 130_000) return null;
   const insPerDay = snap.insPerDay ?? 0;
   if (insPerDay <= 0) return null;
   const thr =
-    snap.current.autovacuum_vacuum_insert_threshold +
-    snap.current.autovacuum_vacuum_insert_scale_factor * snap.live;
+    values.autovacuum_vacuum_insert_threshold +
+    values.autovacuum_vacuum_insert_scale_factor * triggerRows(snap);
   return { days: thr / insPerDay, threshold: thr };
+}
+
+/**
+ * Which trigger actually fires first. Autovacuum starts on whichever
+ * counter crosses first, so the other one's settings are inert and saying
+ * so stops a reader from tuning a knob that cannot move anything.
+ */
+export function bindingTrigger(
+  snap: Snapshot,
+  values: Values = snap.current,
+): { kind: "dead" | "insert"; days: number } {
+  const deadDays =
+    snap.deadPerDay > 0 ? threshold(values, triggerRows(snap)) / snap.deadPerDay : Infinity;
+  const ins = insertPeriodDays(snap, values);
+  if (ins !== null && ins.days < deadDays) return { kind: "insert", days: ins.days };
+  return { kind: "dead", days: deadDays };
 }
 
 function deadDelta(row: Row): number {
@@ -148,6 +175,21 @@ export function buildSnapshot(first: Row, secondRow?: Row, hints?: Hints): Snaps
     lastAutovacuum: text(second, "last_autovacuum"),
     indexes: num(second, "index_count"),
     current: effectiveSettings(globalSettings(second), reloptionsList(second)),
+    relTuples: optNum(second, "reltuples"),
+    isReplica: "is_replica" in second ? Boolean(second.is_replica) : undefined,
+    horizonXids: horizonXids(second),
+    failsafeAge: optNum({ v: globalSettings(second).get("vacuum_failsafe_age") }, "v"),
+    adaptiveVacuum:
+      second.adaptive_vacuum === null || second.adaptive_vacuum === undefined
+        ? undefined
+        : String(second.adaptive_vacuum) === "on",
+    // When no vacuum ran between the samples, the dead-row counter's own
+    // delta is the accumulation rate with HOT pruning already in it. It is
+    // jumpy over a short window, so it is a cross-check, not the input.
+    observedDeadPerDay:
+      two && !countersReset && text(first, "last_autovacuum") === text(second, "last_autovacuum")
+        ? Math.max(0, (num(second, "n_dead_tup") - num(first, "n_dead_tup")) / dtDays)
+        : undefined,
     insPerDay: Math.max(0, Math.round(insDeltaRows / dtDays)),
     modPerDay: Math.max(0, Math.round((deadDeltaRows + insDeltaRows + hotDelta) / dtDays)),
     hotFraction: updDelta > 0 ? Math.min(1, Math.max(0, hotDelta / updDelta)) : undefined,
@@ -173,25 +215,33 @@ export function buildSnapshot(first: Row, secondRow?: Row, hints?: Hints): Snaps
 }
 
 export function verdict(snap: Snapshot): string {
-  const thr = threshold(snap.current, snap.live);
+  const thr = threshold(snap.current, triggerRows(snap));
   const aggressive = snap.xidAge > snap.current.autovacuum_freeze_max_age;
   const tail = aggressive
     ? ", and relfrozenxid age is past autovacuum_freeze_max_age, so every run is aggressive."
     : ".";
+  // The cadence the reader wants to compare against is the one the proposal
+  // produces, so it rides along with the current one.
+  const now = bindingTrigger(snap);
+  const after = bindingTrigger(snap, snap.proposed);
+  const then =
+    Number.isFinite(after.days) && after.days !== now.days
+      ? ` The proposed settings fire every ${fmtDur(after.days)}, ${after.kind}-driven.`
+      : "";
   // On an insert-heavy table the insert trigger (PG13+) fires long before
   // the dead-side one; a dead-side-only cadence would read as decades.
   const ins = insertPeriodDays(snap);
-  const deadPeriod = snap.deadPerDay > 0 ? thr / snap.deadPerDay : Infinity;
-  if (ins !== null && ins.days < deadPeriod) {
+  if (now.kind === "insert" && ins !== null) {
     return (
-      `Insert-driven autovacuum fires every ${fmtDur(ins.days)} at the observed insert rate. ` +
-      `The table reaches ${fmtCompact(ins.threshold)} inserted rows before each run${tail}`
+      `Insert-driven autovacuum fires every ${fmtDur(ins.days)} at the observed insert rate, ` +
+      `so the dead-row settings never trigger a run. ` +
+      `The table reaches ${fmtCompact(ins.threshold)} inserted rows before each run${tail}${then}`
     );
   }
   if (snap.deadPerDay > 0) {
     return (
       `Autovacuum fires every ${fmtDur(thr / snap.deadPerDay)} at the observed write rate. ` +
-      `The table reaches ${fmtCompact(thr)} dead tuples before each run${tail}`
+      `The table reaches ${fmtCompact(thr)} dead tuples before each run${tail}${then}`
     );
   }
   if (snap.countersReset) {

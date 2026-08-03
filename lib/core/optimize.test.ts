@@ -146,8 +146,10 @@ describe("classify + solve: patterns", () => {
   });
 
   it("diagnoses a lowered freeze_max_age as a forced-vacuum loop", () => {
-    // The lowered-reloption pathology: a 4M reloption sits under the ordinary
-    // xmin-horizon age, so the forced vacuum re-fires every naptime.
+    // Seen in the wild: someone lowers this reloption to freeze sooner, but
+    // it is the deadline knob. 4M sits under the ordinary xmin-horizon age,
+    // so the table never gets back under it and the forced vacuum re-fires
+    // every naptime, forever.
     const r = optimize(
       stats({
         xidAge: 25_000_000,
@@ -176,17 +178,36 @@ describe("classify + solve: patterns", () => {
 });
 
 describe("freeze chain", () => {
-  it("caps freeze_max_age at 400M without flat-age evidence", () => {
-    const r = optimize(stats({ xidPerDay: 50_000_000, xidAge: 180_000_000 }));
-    expect(r.values.autovacuum_freeze_max_age).toBeLessThanOrEqual(400_000_000);
-    expect(r.warnings.join(" ")).toMatch(/400M/);
+  it("never raises freeze_max_age above the default", () => {
+    // freeze_table_age escalation advances relfrozenxid on a table that
+    // vacuums normally, so the forced scan never fires and raising its
+    // deadline only shrinks the backstop. Whatever the xid rate.
+    for (const xidPerDay of [1_000_000, 50_000_000, 400_000_000]) {
+      const r = optimize(stats({ xidPerDay, xidAge: 40_000_000 }));
+      expect(r.values.autovacuum_freeze_max_age, `${xidPerDay}/day`).toBeLessThanOrEqual(
+        defaultValues().autovacuum_freeze_max_age,
+      );
+    }
   });
 
-  it("allows a higher freeze_max_age with flat-age evidence", () => {
-    const r = optimize(
-      stats({ xidPerDay: 50_000_000, xidAge: 40_000_000, rateConfidence: "high" }),
+  it("does not move freeze_max_age when it is already at or above the default", () => {
+    const r = optimize(stats({ xidPerDay: 50_000_000, xidAge: 180_000_000 }));
+    expect(r.values.autovacuum_freeze_max_age).toBe(defaultValues().autovacuum_freeze_max_age);
+    expect(r.reasons.autovacuum_freeze_max_age).toBeUndefined();
+  });
+
+  it("proposes the same freeze_max_age whatever the current value is", () => {
+    // Two clusters, same table, ages a few million xids apart, used to get
+    // 400M and 1B because the old gate keyed off the current reloption.
+    const a = optimize(stats({ xidAge: 61_000_000, xidPerDay: 23_600_000 }));
+    const b = optimize(
+      stats({
+        xidAge: 66_500_000,
+        xidPerDay: 23_600_000,
+        current: { ...defaultValues(), autovacuum_freeze_max_age: 4_000_000 },
+      }),
     );
-    expect(r.values.autovacuum_freeze_max_age).toBeGreaterThan(400_000_000);
+    expect(b.values.autovacuum_freeze_max_age).toBe(a.values.autovacuum_freeze_max_age);
   });
 
   it("keeps the freeze chain ordered after all gates (the 4M-reloption table)", () => {
@@ -404,7 +425,204 @@ describe("horizon-blocked overlay", () => {
   });
 });
 
+describe("proposal checks", () => {
+  it("warns when the trigger sits near the not-removable floor", () => {
+    // 1M dead/day against a horizon 4 days old is a 4M-row floor. Any
+    // threshold near it re-triggers every naptime and clears nothing.
+    const r = optimize(
+      stats({
+        live: 100_000_000,
+        deadPerDay: 1_000_000,
+        xidPerDay: 10_000_000,
+        horizonXids: 40_000_000,
+      }),
+    );
+    expect(r.warnings.join(" ")).toMatch(/not-removable floor/);
+  });
+
+  it("stays quiet when the horizon is short", () => {
+    const r = optimize(
+      stats({ deadPerDay: 1_000_000, xidPerDay: 10_000_000, horizonXids: 17_000 }),
+    );
+    expect(r.warnings.join(" ")).not.toMatch(/not-removable floor/);
+  });
+
+  it("warns that a short sample cannot carry the thresholds", () => {
+    const r = optimize(stats({ sampleSeconds: 60 }));
+    expect(r.warnings.join(" ")).toMatch(/60 second sample/);
+  });
+
+  it("drops that warning once real rates are supplied", () => {
+    const r = optimize(
+      stats({ sampleSeconds: 60, hints: { measuredRates: { deadPerDay: 951_000 } } }),
+    );
+    expect(r.warnings.join(" ")).not.toMatch(/second sample/);
+  });
+
+  it("cross-checks the modelled dead rate against what n_dead_tup did", () => {
+    // The modelled rate excludes HOT updates. When the counter disagrees by
+    // this much, that exclusion is wrong for this table.
+    const r = optimize(stats({ deadPerDay: 100_000, observedDeadPerDay: 900_000 }));
+    expect(r.warnings.join(" ")).toMatch(/HOT updates excluded/);
+  });
+
+  it("catches a freeze_max_age at or above the failsafe", () => {
+    const r = optimize(
+      stats({
+        current: { ...defaultValues(), autovacuum_freeze_max_age: 1_500_000_000 },
+        failsafeAge: 1_200_000_000,
+      }),
+    );
+    expect(r.warnings.join(" ")).toMatch(/failsafe fires first/);
+  });
+});
+
+describe("freeze chain derivation", () => {
+  it("lands freeze_table_age on the default once freeze_max_age is the default", () => {
+    // The two knobs move in one edit and one is derived from the other, so
+    // a hardcoded table_age would smuggle back the rarer, larger passes.
+    const r = optimize(
+      stats({ current: { ...defaultValues(), autovacuum_freeze_max_age: 4_000_000 } }),
+    );
+    expect(r.values.autovacuum_freeze_max_age).toBe(200_000_000);
+    expect(r.values.vacuum_freeze_table_age).toBe(150_000_000);
+    expect(r.values.vacuum_freeze_table_age).toBe(0.75 * r.values.autovacuum_freeze_max_age);
+  });
+});
+
+describe("platform capability", () => {
+  it("softens the cost advice when a controller already meters vacuum", () => {
+    const r = optimize(stats({ adaptiveVacuum: true, hints: { ramBytes: 64 * 2 ** 30 } }));
+    expect(r.companions.clusterAdvice.join(" ")).toMatch(/adaptive autovacuum controller/);
+  });
+
+  it("says nothing on a server without one", () => {
+    const r = optimize(stats({ hints: { ramBytes: 64 * 2 ** 30 } }));
+    expect(r.companions.clusterAdvice.join(" ")).not.toMatch(/adaptive/);
+  });
+});
+
+describe("trigger row count", () => {
+  it("uses pg_class.reltuples, the count autovacuum multiplies", () => {
+    // n_live_tup is a statistics estimate and drifts. Autovacuum reads
+    // reltuples, so a report built on n_live_tup states the wrong trigger.
+    const s = stats({ live: 222_325_079, relTuples: 889_315_840, deadPerDay: 400_000 });
+    const r = optimize(s);
+    expect(threshold(r.values, 889_315_840)).toBeGreaterThan(0);
+    expect(r.warnings.join(" ")).toMatch(/reltuples/);
+    expect(r.warnings.join(" ")).toMatch(/4\.0x/);
+  });
+
+  it("falls back to n_live_tup when reltuples is unknown", () => {
+    // Postgres 14+ reports -1 for a relation it has never vacuumed.
+    const unknown = optimize(stats({ relTuples: -1 }));
+    const absent = optimize(stats({}));
+    expect(unknown.values).toEqual(absent.values);
+    expect(unknown.warnings.join(" ")).not.toMatch(/reltuples/);
+  });
+
+  it("says nothing when the two row counts agree", () => {
+    const r = optimize(stats({ live: 1_000_000, relTuples: 1_010_000 }));
+    expect(r.warnings.join(" ")).not.toMatch(/reltuples/);
+  });
+});
+
+describe("measured rates", () => {
+  it("replace the sampled delta and clear the low-confidence damping", () => {
+    const sampled = optimize(stats({ deadPerDay: 283_000, rateConfidence: "low" }));
+    const measured = optimize(
+      stats({
+        deadPerDay: 283_000,
+        rateConfidence: "low",
+        hints: { measuredRates: { deadPerDay: 951_000 } },
+      }),
+    );
+    expect(measured.reasons.autovacuum_vacuum_threshold).toMatch(/951,000/);
+    expect(measured.reasons.autovacuum_vacuum_threshold).not.toMatch(/low-confidence/);
+    expect(sampled.values.autovacuum_vacuum_threshold).not.toBe(
+      measured.values.autovacuum_vacuum_threshold,
+    );
+  });
+});
+
+describe("transparency", () => {
+  it("says when a real wraparound emergency overrides the lag budget", () => {
+    // 1.9B of age against a 2.1B wall: the throttle should open.
+    const r = optimize(
+      stats({
+        xidAge: 1_900_000_000,
+        xidPerDay: 50_000_000,
+        hints: { replicationLagBudget: "tight" },
+      }),
+    );
+    expect(r.warnings.join(" ")).toMatch(/raised from tight to relaxed/);
+  });
+
+  it("does not manufacture an emergency from a lowered freeze_max_age", () => {
+    // 61M of age with 2.1B of headroom is not danger. Judging it against a
+    // bogus 4M reloption declared one, and opened the I/O throttle on
+    // exactly the tables this tool exists to find.
+    const r = optimize(
+      stats({
+        xidAge: 60_966_008,
+        xidPerDay: 23_600_000,
+        current: { ...defaultValues(), autovacuum_freeze_max_age: 4_000_000 },
+        hints: { replicationLagBudget: "tight" },
+      }),
+    );
+    expect(r.warnings.join(" ")).not.toMatch(/raised from tight/);
+    // The forced vacuum really is running, so that part still gets said.
+    expect(r.warnings.join(" ")).toMatch(/deadline knob/);
+  });
+
+  it("warns that a replica snapshot measures nothing", () => {
+    const r = optimize(stats({ isReplica: true }));
+    expect(r.warnings.join(" ")).toMatch(/replica/i);
+  });
+});
+
 describe("companions", () => {
+  it("names the index-bypass regime the proposal lands in", () => {
+    const r = optimize(stats({ pages: 1_000_000, indexes: 5, deadPerDay: 100_000 }));
+    expect(r.companions.indexBypassNote).toMatch(/2% line/);
+  });
+
+  it("lets the 32 MB dead-item limit veto the bypass on its own", () => {
+    // Both bypass conditions have to hold. On a huge table left on the
+    // default scale factor the trigger is hundreds of millions of rows, far
+    // past the item array, however few pages they land on.
+    const r = optimize(
+      stats({
+        live: 4_000_000_000,
+        relTuples: 4_000_000_000,
+        pages: 500_000_000,
+        indexes: 5,
+        deadPerDay: 20_000,
+        insPerDay: 100,
+        lastAutovacuum: null,
+      }),
+    );
+    expect(r.pattern.name).toBe("cold");
+    expect(r.companions.indexBypassNote).toMatch(/32 MB/);
+  });
+
+  it("reports a long analyze interval without proposing a change", () => {
+    const r = optimize(
+      stats({ live: 889_000_000, deadPerDay: 400_000, insPerDay: 200_000, modPerDay: 600_000 }),
+    );
+    expect(r.companions.analyzeNote).toMatch(/Autoanalyze fires every/);
+    expect(r.values.autovacuum_analyze_scale_factor).toBe(
+      defaultValues().autovacuum_analyze_scale_factor,
+    );
+  });
+
+  it("caps maintenance_work_mem at 1 GB before Postgres 17", () => {
+    const pg16 = optimize(stats({ versionNum: 160011, hints: { ramBytes: 512 * 2 ** 30 } }));
+    const pg17 = optimize(stats({ versionNum: 170004, hints: { ramBytes: 512 * 2 ** 30 } }));
+    expect(pg16.companions.clusterAdvice.join(" ")).toMatch(/1024 MB/);
+    expect(pg17.companions.clusterAdvice.join(" ")).toMatch(/5120 MB/);
+  });
+
   it("emits a toast block that follows the heap threshold", () => {
     const r = optimize({ ...demoStats, hasToast: true });
     expect(r.companions.toastSql).toContain(

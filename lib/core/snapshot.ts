@@ -11,6 +11,11 @@ export interface Hints {
   maxWorkers?: number;
   longTransactions?: boolean;
   fkHeavy?: boolean;
+  /**
+   * Rates measured over hours from monitoring, which beat a two-sample
+   * delta on any bursty table. Each one replaces the sampled rate.
+   */
+  measuredRates?: { deadPerDay?: number; insPerDay?: number; xidPerDay?: number };
 }
 
 export interface Snapshot {
@@ -29,6 +34,31 @@ export interface Snapshot {
   current: Values;
   proposed: Values;
   // v2 optional fields (SENSE stage). Older links omit them.
+  /**
+   * pg_class.reltuples: the row count autovacuum's own scale-factor math
+   * uses. n_live_tup is a statistics estimate and drifts from it, so every
+   * trigger calculation reads this one through triggerRows(). Absent on
+   * older links.
+   */
+  relTuples?: number;
+  /** pg_is_in_recovery(): a replica keeps its own counters, all zero. */
+  isReplica?: boolean;
+  /**
+   * How far the oldest snapshot in the cluster sits behind the current xid,
+   * counting replication slots. Dead rows newer than this cannot be removed
+   * by any vacuum, so it sets the floor a threshold has to clear.
+   */
+  horizonXids?: number;
+  /** vacuum_failsafe_age, the point where vacuum drops every throttle. */
+  failsafeAge?: number;
+  /** The platform already meters vacuum I/O and memory against live load. */
+  adaptiveVacuum?: boolean;
+  /**
+   * Dead rows per day read straight off n_dead_tup between two samples with
+   * no vacuum in between. HOT pruning is already in this number, so it is
+   * the cross-check on the modelled rate, which excludes HOT updates.
+   */
+  observedDeadPerDay?: number;
   insPerDay?: number;
   modPerDay?: number;
   hotFraction?: number;
@@ -126,6 +156,12 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
     indexes: z.number().int().nonnegative().nullable(),
     current: currentSchema,
     proposed: proposedSchema,
+    relTuples: z.number().optional(),
+    isReplica: z.boolean().optional(),
+    horizonXids: z.number().nonnegative().optional(),
+    failsafeAge: z.number().positive().optional(),
+    adaptiveVacuum: z.boolean().optional(),
+    observedDeadPerDay: z.number().nonnegative().optional(),
     insPerDay: z.number().nonnegative().optional(),
     modPerDay: z.number().nonnegative().optional(),
     hotFraction: z.number().min(0).max(1).optional(),
@@ -153,6 +189,14 @@ export const SnapshotSchema: z.ZodType<Snapshot> = z
         maxWorkers: z.number().int().positive().optional(),
         longTransactions: z.boolean().optional(),
         fkHeavy: z.boolean().optional(),
+        measuredRates: z
+          .object({
+            deadPerDay: z.number().nonnegative().optional(),
+            insPerDay: z.number().nonnegative().optional(),
+            xidPerDay: z.number().positive().optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

@@ -1,4 +1,11 @@
-import { daysToAggressive, passPages, runCost, shutdownMarginDays, threshold } from "./model";
+import {
+  passPages,
+  rowCountDrift,
+  runCost,
+  shutdownMarginDays,
+  threshold,
+  triggerRows,
+} from "./model";
 import { SETTINGS, type Values } from "./settings";
 import type { PatternName, Snapshot } from "./snapshot";
 
@@ -15,6 +22,8 @@ export interface Companions {
   clusterAdvice: string[];
   fillfactorNote?: string;
   partitionNote?: string;
+  indexBypassNote?: string;
+  analyzeNote?: string;
 }
 
 export interface OptimizeResult {
@@ -66,13 +75,20 @@ export function roundHuman(n: number): number {
 // ---------- SENSE ----------
 
 function sense(snap: SnapshotStats): Rates {
-  const insPerDay = snap.insPerDay ?? 0;
+  // Rates measured over hours replace the two-sample delta. A 60 second
+  // window on a bursty table is not a rate, and every threshold below
+  // derives from these numbers, so a real measurement wins outright.
+  const measured = snap.hints?.measuredRates;
+  const deadPerDay = measured?.deadPerDay ?? snap.deadPerDay;
+  const insPerDay = measured?.insPerDay ?? snap.insPerDay ?? 0;
   return {
-    deadPerDay: snap.deadPerDay,
+    deadPerDay,
     insPerDay,
-    modPerDay: snap.modPerDay ?? snap.deadPerDay + insPerDay,
-    xidPerDay: snap.xidPerDay,
-    confidence: snap.rateConfidence ?? "low",
+    modPerDay: measured ? deadPerDay + insPerDay : (snap.modPerDay ?? deadPerDay + insPerDay),
+    xidPerDay: measured?.xidPerDay ?? snap.xidPerDay,
+    // The dead rate is what the thresholds are built from, so a measured
+    // one lifts the whole report out of the low-confidence damping.
+    confidence: measured?.deadPerDay !== undefined ? "high" : (snap.rateConfidence ?? "low"),
   };
 }
 
@@ -80,15 +96,19 @@ function sense(snap: SnapshotStats): Rates {
 
 interface Classification {
   verdict: PatternVerdict;
+  /** Real wraparound danger, judged against the limit the proposal leaves behind. */
   emergency: boolean;
+  /** A forced anti-wraparound vacuum is running now, whatever put it there. */
+  forcedNow: boolean;
   horizonBlocked: boolean;
 }
 
 function classify(snap: SnapshotStats, rates: Rates): Classification {
+  const rows = triggerRows(snap);
   const sizeBytes = snap.pages * 8192;
-  const churnPerDay = rates.deadPerDay / Math.max(1, snap.live);
+  const churnPerDay = rates.deadPerDay / Math.max(1, rows);
   const insFraction = rates.insPerDay / Math.max(1, rates.insPerDay + rates.deadPerDay);
-  const deadRatio = snap.dead / Math.max(1, snap.live);
+  const deadRatio = snap.dead / Math.max(1, rows);
 
   const scores: { name: PatternName; score: number; evidence: string[] }[] = [
     {
@@ -103,21 +123,21 @@ function classify(snap: SnapshotStats, rates: Rates): Classification {
       name: "queue",
       score: churnPerDay > 5 && sizeBytes < 1 << 30 ? 0.95 : 0,
       evidence: [
-        `the table turns over ${churnPerDay.toFixed(1)}x its live rows per day`,
+        `the table turns over ${churnPerDay.toFixed(1)}x its rows per day`,
         `heap is ${(sizeBytes / 1048576).toFixed(0)} MB`,
       ],
     },
     {
       name: "large-update-heavy",
-      score: snap.live >= 10_000_000 && rates.deadPerDay >= 100_000 && insFraction < 0.7 ? 0.85 : 0,
+      score: rows >= 10_000_000 && rates.deadPerDay >= 100_000 && insFraction < 0.7 ? 0.85 : 0,
       evidence: [
-        `${snap.live.toLocaleString("en-US")} live rows`,
+        `${rows.toLocaleString("en-US")} rows by the count autovacuum uses`,
         `${Math.round(rates.deadPerDay).toLocaleString("en-US")} dead rows per day`,
       ],
     },
     {
       name: "cold",
-      score: rates.deadPerDay < snap.live * 1e-5 && rates.insPerDay < 1000 ? 0.8 : 0,
+      score: rates.deadPerDay < rows * 1e-5 && rates.insPerDay < 1000 ? 0.8 : 0,
       evidence: ["write rates are near zero", "only the freeze schedule matters here"],
     },
     {
@@ -134,13 +154,26 @@ function classify(snap: SnapshotStats, rates: Rates): Classification {
       top = { ...hinted, score: 1, evidence: ["pattern set by hint", ...hinted.evidence] };
   }
 
+  // Two different questions, and they used to share one answer.
+  //
+  // Is a forced vacuum running right now? That is measured against the
+  // limit the table carries today, misconfigured or not.
+  const forcedNow = snap.xidAge > snap.current.autovacuum_freeze_max_age;
+  // Is the table actually near wraparound? That has to be measured against
+  // the limit the proposal leaves behind, because the current one is the
+  // single value this tool exists to distrust. Judging danger by it hands a
+  // fake emergency, and a loosened I/O throttle, to exactly the tables with
+  // a bogus limit: the population robovac is best at finding.
+  const effectiveFreezeMax = Math.max(
+    snap.current.autovacuum_freeze_max_age,
+    def("autovacuum_freeze_max_age").def,
+  );
   const emergency =
-    snap.xidAge > snap.current.autovacuum_freeze_max_age ||
-    shutdownMarginDays(snap.xidAge, snap.xidPerDay) < 30;
+    snap.xidAge > effectiveFreezeMax || shutdownMarginDays(snap.xidAge, snap.xidPerDay) < 30;
 
   // Dead rows pile up although autovacuum ran recently: the xmin horizon is pinned, knobs cannot help.
   const currentPeriodDays =
-    rates.deadPerDay > 0 ? threshold(snap.current, snap.live) / rates.deadPerDay : Infinity;
+    rates.deadPerDay > 0 ? threshold(snap.current, rows) / rates.deadPerDay : Infinity;
   const recentWindowDays = Math.min(Math.max(2 * currentPeriodDays, 0.5), 2);
   const lastAvDays = snap.lastAutovacuum
     ? (Date.parse(snap.capturedAt) - Date.parse(snap.lastAutovacuum)) / 86_400_000
@@ -152,12 +185,13 @@ function classify(snap: SnapshotStats, rates: Rates): Classification {
   const horizonBlocked =
     deadRatio > 0.1 &&
     snap.dead >= 10_000 &&
-    snap.dead >= 25 * threshold(snap.current, snap.live) &&
+    snap.dead >= 25 * threshold(snap.current, rows) &&
     lastAvDays < recentWindowDays;
 
   return {
     verdict: { name: top.name, score: top.score, evidence: top.evidence },
     emergency,
+    forcedNow,
     horizonBlocked,
   };
 }
@@ -186,16 +220,17 @@ function solve(
   const reasons: Record<string, string> = {};
   const pattern = cls.verdict.name;
   const tv = CADENCE_DAYS[pattern];
+  const rows = triggerRows(snap);
 
   // Triggers (dead-row side).
   let cadenceDays = tv;
   if (pattern !== "cold" && rates.deadPerDay > 0) {
-    const wanted = clamp(roundHuman(rates.deadPerDay * tv), 500, 0.25 * Math.max(2000, snap.live));
+    const wanted = clamp(roundHuman(rates.deadPerDay * tv), 500, 0.25 * Math.max(2000, rows));
     const thresholdRows = clampToDef("autovacuum_vacuum_threshold", wanted);
-    const scale = snap.live >= 5_000_000 ? 0 : 0.01;
+    const scale = rows >= 5_000_000 ? 0 : 0.01;
     values.autovacuum_vacuum_threshold = thresholdRows;
     values.autovacuum_vacuum_scale_factor = clampToDef("autovacuum_vacuum_scale_factor", scale);
-    cadenceDays = threshold(values, snap.live) / rates.deadPerDay;
+    cadenceDays = threshold(values, rows) / rates.deadPerDay;
     const cadenceLabel =
       tv < 1 / 20 ? `${Math.round(tv * 1440)} minutes` : `${Math.round(tv * 24)} hours`;
     reasons.autovacuum_vacuum_threshold = `About ${cadenceLabel} of the measured dead-row rate (${Math.round(
@@ -232,7 +267,7 @@ function solve(
     );
     values.autovacuum_vacuum_insert_scale_factor = clampToDef(
       "autovacuum_vacuum_insert_scale_factor",
-      snap.live >= 5_000_000 ? 0 : 0.01,
+      rows >= 5_000_000 ? 0 : 0.01,
     );
     if (pattern === "append-only") cadenceDays = ti;
     reasons.autovacuum_vacuum_insert_threshold = `About ${Math.round(ti * 24)} h of the measured insert rate, so pages are vacuumed and frozen while still in cache.`;
@@ -256,18 +291,19 @@ function solve(
       "Half a vacuum interval of xids. A cutoff past one interval leaves pages all-visible but unfrozen, and only the aggressive vacuum ever freezes them.";
   }
 
-  let freezeMax = clamp(roundHuman(60 * rates.xidPerDay), 200_000_000, 1_000_000_000);
-  const flatAgeEvidence =
-    snap.xidAge < 0.5 * snap.current.autovacuum_freeze_max_age && rates.confidence === "high";
-  if (freezeMax > 400_000_000 && !flatAgeEvidence) {
-    freezeMax = 400_000_000;
-    warnings.push(
-      "freeze_max_age capped at 400M: raising it further needs evidence that relfrozenxid age stays flat.",
-    );
-  }
-  if (freezeMax !== snap.current.autovacuum_freeze_max_age) {
-    values.autovacuum_freeze_max_age = clampToDef("autovacuum_freeze_max_age", freezeMax);
-    reasons.autovacuum_freeze_max_age = `Puts the forced anti-wraparound vacuum 30-90 days out at the measured xid rate (${(rates.xidPerDay / 1e6).toFixed(1)} M/day).`;
+  // freeze_max_age is a backstop, not a cadence knob. Once a table vacuums
+  // on a threshold cadence, the vacuum_freeze_table_age escalation rides a
+  // run that was going to happen anyway and advances relfrozenxid, so the
+  // forced anti-wraparound scan never fires and the value it is set to
+  // stops mattering. Raising it only shrinks the safety margin, so the
+  // proposal moves it in one direction: back up to the default when
+  // somebody lowered it.
+  const freezeMaxDefault = def("autovacuum_freeze_max_age").def;
+  if (snap.current.autovacuum_freeze_max_age < freezeMaxDefault) {
+    values.autovacuum_freeze_max_age = freezeMaxDefault;
+    reasons.autovacuum_freeze_max_age = `Back to the ${(freezeMaxDefault / 1e6).toFixed(
+      0,
+    )}M default. This is the deadline for the forced anti-wraparound vacuum, not a way to freeze sooner; vacuum_freeze_min_age is that knob.`;
   }
   if (snap.hints?.fkHeavy) {
     warnings.push(
@@ -282,8 +318,17 @@ function solve(
   values.vacuum_cost_page_hit = 1;
   values.vacuum_cost_page_miss = snap.hints?.storage === "hdd" ? 10 : 2;
   values.vacuum_cost_page_dirty = 20;
-  let budget: keyof typeof LAG_BUDGET_MBPS = snap.hints?.replicationLagBudget ?? "tight";
-  if (cls.emergency) budget = budget === "tight" ? "relaxed" : "none";
+  const askedBudget: keyof typeof LAG_BUDGET_MBPS = snap.hints?.replicationLagBudget ?? "tight";
+  let budget = askedBudget;
+  // A wraparound emergency outranks replica lag, so the throttle opens one
+  // step. Say so: otherwise the report quotes a budget nobody asked for and
+  // reads like the hint was dropped.
+  if (cls.emergency) {
+    budget = budget === "tight" ? "relaxed" : "none";
+    warnings.push(
+      `Replication-lag budget raised from ${askedBudget} to ${budget} for this report: relfrozenxid age is past the limit, and stopping the wraparound outranks replica lag. It returns to ${askedBudget} once the age is back under control.`,
+    );
+  }
   const workPages = passPages(snap.pages, snap.allVisiblePages, snap.indexes);
   const passMB = (workPages * 8192) / 1048576;
   // A pass under 1 GB is too short to lag a replica; the throttle only costs.
@@ -351,6 +396,7 @@ function prove(
 ): void {
   const { values, reasons } = solved;
   const cur = snap.current;
+  const rows = triggerRows(snap);
 
   // Low-confidence rates clamp every knob to one bounded step from current.
   if (rates.confidence === "low") {
@@ -373,8 +419,8 @@ function prove(
     }
   }
 
-  const thrCur = threshold(cur, snap.live);
-  const thrNew = threshold(values, snap.live);
+  const thrCur = threshold(cur, rows);
+  const thrNew = threshold(values, rows);
 
   // Gate 1: peak dead rows must not rise more than 10%.
   if (thrNew > thrCur * 1.1) {
@@ -389,7 +435,7 @@ function prove(
   const workPages = passPages(snap.pages, snap.allVisiblePages, snap.indexes);
   const costCur = runCost(cur, workPages);
   const costNew = runCost(values, workPages);
-  if (costNew.seconds > costCur.seconds && threshold(values, snap.live) >= thrCur) {
+  if (costNew.seconds > costCur.seconds && threshold(values, rows) >= thrCur) {
     for (const key of [
       "autovacuum_vacuum_cost_delay",
       "autovacuum_vacuum_cost_limit",
@@ -402,17 +448,6 @@ function prove(
     }
     reasons.autovacuum_vacuum_cost_limit =
       "Kept current: the proposal would slow the pass without a bloat win.";
-  }
-
-  // Gate 3: time to the forced aggressive vacuum must not fall below 14 days.
-  if (!cls.emergency) {
-    const daysCur = daysToAggressive(cur.autovacuum_freeze_max_age, snap.xidAge, snap.xidPerDay);
-    const daysNew = daysToAggressive(values.autovacuum_freeze_max_age, snap.xidAge, snap.xidPerDay);
-    if (daysNew < Math.min(14, daysCur)) {
-      values.autovacuum_freeze_max_age = cur.autovacuum_freeze_max_age;
-      reasons.autovacuum_freeze_max_age =
-        "Kept current: the proposal would pull the forced aggressive vacuum under 14 days out.";
-    }
   }
 
   // The rest of the freeze chain follows freeze_max_age, so it is derived
@@ -442,14 +477,14 @@ function prove(
       (rates.deadPerDay / Math.max(1, thr)) * cost.seconds;
     const curLoad = perDay(thrCur, costCur);
     const cap = Math.max(4 * curLoad, 6 * 3600);
-    let newLoad = perDay(threshold(values, snap.live), runCost(values, workPages));
+    let newLoad = perDay(threshold(values, rows), runCost(values, workPages));
     let guard = 0;
     while (newLoad > cap && guard < 12) {
       values.autovacuum_vacuum_threshold = clampToDef(
         "autovacuum_vacuum_threshold",
         values.autovacuum_vacuum_threshold * 2,
       );
-      newLoad = perDay(threshold(values, snap.live), runCost(values, workPages));
+      newLoad = perDay(threshold(values, rows), runCost(values, workPages));
       guard++;
     }
     if (guard > 0) {
@@ -474,15 +509,37 @@ function buildCompanions(snap: SnapshotStats, values: Values, cls: Classificatio
   const advice: string[] = [];
   const hints = snap.hints;
   if (hints?.ramBytes) {
-    const mwm = Math.min(0.01 * hints.ramBytes, 5 * 2 ** 30);
+    // Before Postgres 17 the dead-tuple list is one allocation with a hard
+    // 1 GB ceiling (about 178M tuple identifiers), so anything above that
+    // is memory a vacuum will never touch. PG17 replaced it with TidStore
+    // and the ceiling is gone.
+    const tidStore = (snap.versionNum ?? 0) >= 170_000;
+    const cap = tidStore ? 5 * 2 ** 30 : 2 ** 30;
+    const mwm = Math.min(0.01 * hints.ramBytes, cap);
     const vbul = Math.min(0.02 * hints.ramBytes, 10 * 2 ** 30);
-    advice.push(`maintenance_work_mem ≈ ${Math.round(mwm / 2 ** 20)} MB (1% of RAM, cap 5 GB).`);
+    advice.push(
+      `maintenance_work_mem ≈ ${Math.round(mwm / 2 ** 20)} MB (1% of RAM, cap ${
+        tidStore ? "5 GB" : "1 GB"
+      })${
+        tidStore
+          ? "."
+          : ": before PG17 the dead-tuple array cannot grow past 1 GB, so a larger value does nothing for vacuum."
+      }`,
+    );
     advice.push(
       `vacuum_buffer_usage_limit ≈ ${Math.round(vbul / 2 ** 20)} MB (2% of RAM, cap 10 GB, PG16+).`,
     );
   }
   if (hints?.maxWorkers !== undefined && hints.maxWorkers < 5) {
     advice.push("autovacuum_max_workers = 5: raise workers before you lower per-table frequency.");
+  }
+  // One capability, not a vendor list: something on this platform already
+  // adjusts vacuum I/O and memory against live load, so the cost and memory
+  // numbers here are advisory and may simply be overridden.
+  if (snap.adaptiveVacuum) {
+    advice.push(
+      "This server runs an adaptive autovacuum controller that meters vacuum I/O, workers and memory against live load. Treat the cost settings and the memory figures above as a ceiling to sanity-check, not as values to apply: the controller may override them. The trigger and freeze settings are unaffected, because it does not decide when a table becomes eligible.",
+    );
   }
   const companions: Companions = { clusterAdvice: advice };
   if (snap.hasToast) {
@@ -507,7 +564,154 @@ function buildCompanions(snap: SnapshotStats, values: Values, cls: Classificatio
     companions.partitionNote =
       "Reloptions do not inherit: apply the settings to every partition, template them for new partitions, and re-apply after any table rewrite.";
   }
+  companions.indexBypassNote = indexBypassNote(snap, values);
+  companions.analyzeNote = analyzeNote(snap, values);
   return companions;
+}
+
+/**
+ * Heap pages carrying at least one dead item. The threshold counts tuples
+ * and the bypass counts pages, so the conversion depends on clustering,
+ * which nothing in a snapshot reveals. One dead tuple per page is the
+ * conservative end: it predicts the expensive regime rather than promising
+ * cheap runs that may not arrive.
+ */
+function pagesWithDeadItems(deadRows: number, pages: number): number {
+  return Math.min(pages, deadRows);
+}
+
+/**
+ * Postgres also refuses the bypass once the dead-item array would exceed
+ * 32 MB, holding six bytes per item. Both conditions must hold, so a table
+ * with many dead items spread thinly still pays for the index pass.
+ */
+const MAX_BYPASS_DEAD_ITEMS = (32 * 1024 * 1024) / 6;
+
+/**
+ * Which of the two vacuum regimes the proposed threshold lands in. Postgres
+ * skips the index pass when dead line pointers sit on under 2% of the
+ * table's pages, and that single line decides whether a run costs seconds
+ * or walks every index. It also bounds how much a lower threshold can buy:
+ * dead items survive a bypassed run, so more frequent heap passes do not
+ * make the index passes any rarer.
+ */
+function indexBypassNote(snap: SnapshotStats, values: Values): string | undefined {
+  const indexes = snap.indexes ?? 0;
+  if (indexes <= 0 || snap.pages < 1000) return undefined;
+  const linePages = 0.02 * snap.pages;
+  const deadAtTrigger = threshold(values, triggerRows(snap));
+  const atTrigger = pagesWithDeadItems(deadAtTrigger, snap.pages);
+  const pct = ((atTrigger / snap.pages) * 100).toFixed(2);
+  // Both conditions have to hold, so the item count can veto on its own.
+  if (deadAtTrigger >= MAX_BYPASS_DEAD_ITEMS) {
+    return `At the proposed trigger the ${Math.round(deadAtTrigger).toLocaleString(
+      "en-US",
+    )} dead items need more than the 32 MB the bypass allows, so every run walks all ${indexes} indexes however thinly they are spread. The 2% page line does not rescue this one.`;
+  }
+  return atTrigger < linePages
+    ? `At the proposed trigger the dead rows sit on at most ${Math.round(atTrigger).toLocaleString(
+        "en-US",
+      )} pages, ${pct}% of the table, under the 2% line where Postgres skips the index pass, so runs can stay heap-only and cheap. Dead items still accumulate across those runs, so the index pass arrives when the line is crossed, not when the threshold is. This takes the worst case of one dead row per page; where they cluster, the margin is wider.`
+    : `At the proposed trigger the dead rows sit on up to ${Math.round(atTrigger).toLocaleString(
+        "en-US",
+      )} pages, ${pct}% of the table, past the 2% line, so every run walks all ${indexes} indexes. Lowering the threshold further adds heap passes without making the index passes rarer.`;
+}
+
+/**
+ * The analyze cadence, as an observation. The proposal leaves analyze alone
+ * on a stable table on purpose (a fresh sample of a fixed size costs the
+ * same every run and re-rolls plans), but a scale factor against a large
+ * table can put the interval months out, and the reader should see that
+ * number rather than infer approval from silence.
+ */
+function analyzeNote(snap: SnapshotStats, values: Values): string | undefined {
+  const modPerDay = snap.modPerDay ?? 0;
+  if (modPerDay <= 0) return undefined;
+  const rows = triggerRows(snap);
+  const trigger =
+    values.autovacuum_analyze_threshold + values.autovacuum_analyze_scale_factor * rows;
+  const days = trigger / modPerDay;
+  if (days < 7) return undefined;
+  return `Autoanalyze fires every ${days.toFixed(
+    0,
+  )} days here: ${Math.round(trigger).toLocaleString("en-US")} modifications at ${Math.round(
+    modPerDay,
+  ).toLocaleString(
+    "en-US",
+  )} per day. That is the scale factor against a large table. The proposal leaves it alone because a fresh sample costs the same however often it runs, but if the planner picks bad plans on this table, this number is why. The case that bites even on a stable distribution is a column that only grows, a timestamp or a sequential id: its newest values sit past the last histogram bucket, so queries filtering on a recent range read stale density. An index on that column mostly rescues it, because the planner probes the index for the real bound at plan time.`;
+}
+
+/** A sample this short stops describing a bursty table and starts describing a minute of it. */
+const TRUSTED_SAMPLE_SECONDS = 600;
+
+/**
+ * What the proposed numbers are worth, judged after they exist. Each check
+ * here needs the proposal, so none of them can live in solve().
+ */
+function checkProposal(
+  snap: SnapshotStats,
+  rates: Rates,
+  values: Values,
+  warnings: string[],
+): void {
+  // The floor: dead rows younger than the oldest snapshot cannot be removed
+  // by any vacuum. A threshold under it re-triggers every naptime forever.
+  if (snap.horizonXids !== undefined && rates.deadPerDay > 0 && rates.xidPerDay > 0) {
+    const horizonDays = snap.horizonXids / rates.xidPerDay;
+    const floor = rates.deadPerDay * horizonDays;
+    const trigger = threshold(values, triggerRows(snap));
+    if (floor > 0 && trigger < 3 * floor) {
+      warnings.push(
+        `The proposed trigger (${Math.round(trigger).toLocaleString("en-US")} rows) sits within 3x of the dead-but-not-removable floor (about ${Math.round(
+          floor,
+        ).toLocaleString(
+          "en-US",
+        )} rows: ${Math.round(rates.deadPerDay).toLocaleString("en-US")} dead/day against an xmin horizon ${snap.horizonXids.toLocaleString("en-US")} xids old). Vacuum cannot remove rows the horizon still protects, so a threshold near that floor re-triggers every naptime and clears nothing. Raise it, or find what holds the horizon.`,
+      );
+    }
+  }
+
+  // A short window measures a minute, not a rate, and the thresholds are
+  // built entirely from it. Separate failure from the row-count one: fixing
+  // reltuples makes the rest of the report look right while these stay wrong.
+  const seconds = snap.sampleSeconds;
+  if (
+    !snap.hints?.measuredRates?.deadPerDay &&
+    seconds !== undefined &&
+    seconds < TRUSTED_SAMPLE_SECONDS &&
+    rates.deadPerDay > 0
+  ) {
+    warnings.push(
+      `Every threshold below derives from a ${Math.round(seconds)} second sample. On a bursty table that window measures the minute it ran in, not the workload: it can miss the real rate by several times in either direction. Re-sample 10-15 minutes apart, or pass measured_rates from monitoring.`,
+    );
+  }
+
+  // The modelled dead rate excludes HOT updates on the argument that page
+  // pruning reclaims them. When the counter's own delta disagrees, that
+  // argument does not hold for this table.
+  const observed = snap.observedDeadPerDay;
+  if (observed !== undefined && observed > 1000 && rates.deadPerDay > 0) {
+    const gap = Math.max(observed, rates.deadPerDay) / Math.min(observed, rates.deadPerDay);
+    if (gap >= 3) {
+      warnings.push(
+        `The dead-row rate from the write counters (${Math.round(rates.deadPerDay).toLocaleString(
+          "en-US",
+        )}/day, HOT updates excluded) and the one n_dead_tup actually accumulated (${Math.round(
+          observed,
+        ).toLocaleString(
+          "en-US",
+        )}/day) differ by ${gap.toFixed(1)}x. The exclusion assumes page pruning reclaims HOT versions before vacuum sees them, which does not hold here.`,
+      );
+    }
+  }
+
+  // The failsafe drops every throttle. A freeze_max_age above it means the
+  // failsafe fires first, so the ordinary forced vacuum never gets its turn.
+  if (snap.failsafeAge !== undefined && values.autovacuum_freeze_max_age >= snap.failsafeAge) {
+    warnings.push(
+      `autovacuum_freeze_max_age (${values.autovacuum_freeze_max_age.toLocaleString("en-US")}) is at or above vacuum_failsafe_age (${snap.failsafeAge.toLocaleString("en-US")}). The failsafe fires first and throws away every cost limit, so the forced vacuum this setting schedules never gets its turn. Lower it below the failsafe.`,
+    );
+  }
 }
 
 const HORIZON_DIAGNOSIS =
@@ -520,28 +724,43 @@ export function optimize(snap: SnapshotStats): OptimizeResult {
   const cls = classify(snap, rates);
   const warnings: string[] = [];
 
-  if (cls.emergency) {
-    if (snap.xidAge > snap.current.autovacuum_freeze_max_age) {
-      // A reloption far below the default is a lowered deadline, not real
-      // wraparound risk. The xmin horizon keeps relfrozenxid a few million
-      // xids old at all times, so a limit under that age can never be
-      // satisfied and the forced vacuum re-fires every naptime, forever.
-      if (snap.current.autovacuum_freeze_max_age < 100_000_000) {
-        warnings.push(
-          "autovacuum_freeze_max_age is lowered below the age the xmin horizon allows. The table can never get back under the limit, so a forced anti-wraparound vacuum starts every naptime, forever. This setting is the deadline knob, not the eagerness knob: RESET it and lower vacuum_freeze_min_age to freeze earlier.",
-        );
-      } else {
-        warnings.push(
-          "relfrozenxid age is past autovacuum_freeze_max_age: the forced anti-wraparound vacuum runs now and does not yield to lock waiters.",
-        );
-      }
-    }
-    const margin = shutdownMarginDays(snap.xidAge, snap.xidPerDay);
-    if (margin < 30) {
+  // A replica keeps its own statistics counters and they never move, so
+  // every rate below reads as zero and the table looks cold whatever it is.
+  if (snap.isReplica) {
+    warnings.push(
+      "This snapshot came from a replica (pg_is_in_recovery() is true). Replicas keep their own pg_stat_user_tables counters, which stay at zero, so every rate here is wrong and the table classifies as cold no matter how busy it is. Re-run the query on the primary.",
+    );
+  }
+  // Autovacuum multiplies the scale factor by pg_class.reltuples. A wide
+  // gap to n_live_tup means analyze is behind, which is worth saying on its
+  // own, and it also tells the reader why the trigger sits where it does.
+  const drift = rowCountDrift(snap);
+  if (drift >= 2) {
+    warnings.push(
+      `pg_class.reltuples (${Math.round(triggerRows(snap)).toLocaleString("en-US")}) and n_live_tup (${snap.live.toLocaleString("en-US")}) differ by ${drift.toFixed(1)}x. The triggers below use reltuples because autovacuum does. A gap this wide is itself a signal that analyze is not keeping up on this table.`,
+    );
+  }
+
+  if (cls.forcedNow) {
+    // A reloption far below the default is a lowered deadline, not real
+    // wraparound risk. The xmin horizon keeps relfrozenxid a few million
+    // xids old at all times, so a limit under that age can never be
+    // satisfied and the forced vacuum re-fires every naptime, forever.
+    if (snap.current.autovacuum_freeze_max_age < 100_000_000) {
       warnings.push(
-        `Write shutdown in ~${margin.toFixed(1)} days at the observed xid rate. Treat this as an incident, not a tuning task.`,
+        "autovacuum_freeze_max_age is lowered below the age the xmin horizon allows. The table can never get back under the limit, so a forced anti-wraparound vacuum starts every naptime, forever. This setting is the deadline knob, not the eagerness knob: RESET it and lower vacuum_freeze_min_age to freeze earlier.",
+      );
+    } else {
+      warnings.push(
+        "relfrozenxid age is past autovacuum_freeze_max_age: the forced anti-wraparound vacuum runs now and does not yield to lock waiters.",
       );
     }
+  }
+  const margin = shutdownMarginDays(snap.xidAge, snap.xidPerDay);
+  if (margin < 30) {
+    warnings.push(
+      `Write shutdown in ~${margin.toFixed(1)} days at the observed xid rate. Treat this as an incident, not a tuning task.`,
+    );
   }
   if (snap.hints?.longTransactions) {
     warnings.push(
@@ -562,6 +781,7 @@ export function optimize(snap: SnapshotStats): OptimizeResult {
 
   const solved = solve(snap, rates, cls, warnings);
   prove(snap, rates, cls, solved, warnings);
+  checkProposal(snap, rates, solved.values, warnings);
 
   return {
     values: solved.values,

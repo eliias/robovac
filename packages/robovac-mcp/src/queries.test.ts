@@ -30,6 +30,12 @@ describe("mcp sql", () => {
       "xid_now",
       "is_partition",
       "has_toast",
+      "reltuples",
+      "is_replica",
+      "horizon_xids",
+      "slot_horizon_xids",
+      "adaptive_vacuum",
+      "vacuum_failsafe_age",
       "version_num",
       "global_settings",
       "captured_at",
@@ -48,5 +54,22 @@ describe("mcp sql", () => {
   it("clamps the candidates limit", () => {
     expect(candidatesSql(500)).toContain("LIMIT 50");
     expect(candidatesSql(0)).toContain("LIMIT 1");
+  });
+
+  it("reads the current xid, not the horizon, for the rate", () => {
+    // pg_snapshot_xmin is the oldest running transaction. Using it as the
+    // clock reports a rate near zero exactly when something pins it.
+    const q = snapshotSql("public", "events");
+    expect(q).toMatch(/pg_snapshot_xmax\(pg_current_snapshot\(\)\)[^\n]*AS xid_now/);
+  });
+
+  it("ranks candidates by pages of work, and can see toast relations", () => {
+    const q = candidatesSql(10);
+    // pg_stat_user_tables hides toast, which on a wide table is the bigger
+    // vacuum consumer of the two.
+    expect(q).toContain("pg_stat_all_tables");
+    expect(q).toContain("toast_parent");
+    // A high dead ratio on a tiny table must not outrank a huge one.
+    expect(q).toMatch(/relpages.*DESC/s);
   });
 });
