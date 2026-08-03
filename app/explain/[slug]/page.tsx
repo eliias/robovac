@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { TermLink } from "@/components/TermLink";
 import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
 import { CONTENT } from "@/lib/explain-content";
-import { TERMS } from "@/lib/terms";
+import { findTerm, TERMS } from "@/lib/terms";
 import { requestOrigin } from "@/lib/origin";
 import { social } from "@/lib/social";
 
@@ -22,29 +22,32 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const term = TERMS.find((t) => t.slug === slug && t.built);
-  if (!term) return { title: `robovac · ${slug}` };
+  const term = findTerm(slug);
+  if (!term?.built) return { title: `robovac · ${slug}` };
   return {
     title: `${term.term} — robovac`,
     description: term.blurb,
-    alternates: { canonical: `/explain/${slug}` },
+    alternates: { canonical: `/explain/${term.slug}` },
     ...social({
       title: term.term,
       description: term.blurb,
-      path: `/explain/${slug}`,
+      path: `/explain/${term.slug}`,
       type: "article",
-      image: { url: `/brand/og/explain-${slug}.png`, alt: `robovac: ${term.term}` },
+      image: { url: `/brand/og/explain-${term.slug}.png`, alt: `robovac: ${term.term}` },
     }),
   };
 }
 
 export default async function ExplainPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const term = TERMS.find((t) => t.slug === slug && t.built);
-  const content = CONTENT[slug];
-  if (!term || !content) notFound();
+  const term = findTerm(slug);
+  const content = term ? CONTENT[term.slug] : undefined;
+  if (!term?.built || !content) notFound();
+  // An alias reached us (an old URL, or a tool name someone typed). One concept
+  // has one URL, so hand the reader the canonical one instead of serving both.
+  if (term.slug !== slug) permanentRedirect(`/explain/${term.slug}`);
 
-  const { definition, Demo, seeAlso, footnote } = content;
+  const { definition, Panel, Demo, seeAlso, footnote } = content;
 
   // These pages are literally definitions; DefinedTerm is the one schema type
   // that fits without inventing claims.
@@ -93,6 +96,8 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
         {definition}
       </p>
 
+      {Panel && <Panel />}
+
       {Demo && (
         <>
           <noscript>
@@ -121,7 +126,7 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
         </div>
         {seeAlso.map((slug2) => (
           <TermLink key={slug2} slug={slug2} style={{ fontSize: 13, alignSelf: "flex-start" }}>
-            {TERMS.find((t) => t.slug === slug2)?.term ?? slug2}
+            {findTerm(slug2)?.term ?? slug2}
           </TermLink>
         ))}
         <Link

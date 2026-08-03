@@ -2,12 +2,15 @@ import type { ComponentType, ReactNode } from "react";
 import { CostDemo } from "@/components/explain/CostDemo";
 import { FreezeDemo } from "@/components/explain/FreezeDemo";
 import { HotDemo } from "@/components/explain/HotDemo";
+import { RewriteTable } from "@/components/explain/RewriteTable";
 import { TriggerDemo } from "@/components/explain/TriggerDemo";
 import { XminDemo } from "@/components/explain/XminDemo";
 import { C, MONO } from "@/components/ui";
 
 export interface ExplainContent {
   definition: ReactNode;
+  /** Static content below the definition. Unlike Demo, it needs no JavaScript. */
+  Panel?: ComponentType;
   Demo?: ComponentType;
   seeAlso: string[];
   footnote: string;
@@ -123,7 +126,7 @@ export const CONTENT: Record<string, ExplainContent> = {
       </>
     ),
     Demo: TriggerDemo,
-    seeAlso: ["dead-tuple", "autovacuum_vacuum_scale_factor", "pg_repack"],
+    seeAlso: ["dead-tuple", "autovacuum_vacuum_scale_factor", "table-rewrite"],
     footnote:
       "Measure it exactly with pgstattuple, or estimate with the check_postgres queries (~3% off on plain tables, far more on TOAST-heavy ones). Practitioners investigate above ~20-30% and rebuild above ~50%.",
   },
@@ -520,19 +523,20 @@ export const CONTENT: Record<string, ExplainContent> = {
     footnote:
       "Monitoring that only watches public.* misses TOAST age entirely; the forced freeze scan of a multi-TB pg_toast table is a classic surprise.",
   },
-  pg_repack: {
+  "table-rewrite": {
     definition: (
       <>
-        Vacuum makes space reusable; it does not give pages back. {m("pg_repack")} does: it rebuilds
-        a table (or index) online by copying live rows to a new file while capturing concurrent
-        changes with triggers, then swaps the files, holding only brief exclusive locks at the start
-        and end. The costs are real (double the disk during the rebuild, the full table written
-        through WAL, and a reindex of everything), but it is the standard answer once bloat is
-        already in the file.
+        Vacuum makes space reusable inside the file. It almost never gives the file back, so a table
+        that once bloated stays big until something rewrites it. A rewrite copies the live rows into
+        a new file, rebuilds every index, and swaps the two. Four tools do that same work, and all
+        four want free disk for a full second copy of the table plus the WAL burst that writing it
+        produces. What separates them is the lock: how long the table is unavailable, and what you
+        have to install or restart to shorten that window.
       </>
     ),
+    Panel: RewriteTable,
     seeAlso: ["bloat", "fillfactor"],
     footnote:
-      "Alternatives: VACUUM FULL (simple, but an exclusive lock for the whole rewrite) and pg_squeeze (logical-replication based, no triggers). Table storage parameters can be lost on rebuild tooling: re-apply reloptions afterwards.",
+      "Plan the disk before you need it: a cluster at 95% from bloat can no longer run the tool that would fix it. All four rewrite the file, so table storage parameters can be lost: re-apply reloptions afterwards. For indexes alone, REINDEX CONCURRENTLY (Postgres 12+) is cheaper than any of them.",
   },
 };

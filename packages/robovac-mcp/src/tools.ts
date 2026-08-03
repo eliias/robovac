@@ -4,7 +4,7 @@ import { encodeReport } from "../../../lib/core/codec";
 import { optimize } from "../../../lib/core/optimize";
 import { SETTINGS } from "../../../lib/core/settings";
 import type { Hints } from "../../../lib/core/snapshot";
-import { TERMS, termHref } from "../../../lib/terms";
+import { findTerm, TERMS, termHref } from "../../../lib/terms";
 import { candidatesSql, snapshotSql } from "./queries";
 import { buildSnapshot, verdict } from "./report";
 
@@ -27,7 +27,7 @@ function applyNotes(table: string): string[] {
   return [
     `ALTER TABLE ... SET takes a SHARE UPDATE EXCLUSIVE lock. It does not block queries, but it queues behind a running anti-wraparound vacuum, and a lock_timeout can kill it silently. Verify after the apply: SELECT reloptions FROM pg_class WHERE oid = '${table}'::regclass;`,
     "Expect one catch-up vacuum right after the apply. Near-free runs can then re-trigger every naptime while dead-but-not-removable rows drain; the catch-up run held the xmin horizon open, so this loop is a transient. A loop that persists for hours means the threshold sits under the standing floor (churn times snapshot-horizon age): raise the threshold.",
-    "Reloptions do not survive a table rewrite (pg_repack, pg-osc): re-apply after one.",
+    "Reloptions do not survive a table rewrite (VACUUM FULL, pg_repack, pg_squeeze, pg-osc): re-apply after one.",
   ];
 }
 
@@ -172,7 +172,7 @@ export function registerTools(server: McpServer): void {
     },
     async ({ term, base_url }) => {
       const slug = term.trim().toLowerCase().replaceAll(" ", "-");
-      const entry = TERMS.find((t) => t.slug === slug);
+      const entry = findTerm(slug);
       if (!entry) {
         throw new Error(
           `unknown term "${term}". Known terms: ${TERMS.map((t) => t.slug).join(", ")}`,

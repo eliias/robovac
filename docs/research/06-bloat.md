@@ -1,6 +1,6 @@
 # 6. Bloat
 
-tl;dr: Bloat is space in table and index files that holds no live data. VACUUM recycles this space for reuse, but it almost never returns the space to the operating system. Measure bloat with pgstattuple for exact numbers, or with estimation queries for a cheap first pass (expect 10 to 30 percent error). Bloat costs you cache hits, scan time, WAL volume, and disk. To reclaim space online, use REINDEX CONCURRENTLY for indexes and pg_repack or pg_squeeze for tables. Most practitioners investigate above 20 to 30 percent bloat and act above 50 percent.
+tl;dr: Bloat is space in table and index files that holds no live data. VACUUM recycles this space for reuse, but it almost never returns the space to the operating system. Measure bloat with pgstattuple for exact numbers, or with estimation queries for a cheap first pass (expect 10 to 30 percent error). Bloat costs you cache hits, scan time, WAL volume, and disk. To reclaim space online, use REINDEX CONCURRENTLY for indexes and pg_repack, pg_squeeze or pg-osc for tables. Most practitioners investigate above 20 to 30 percent bloat and act above 50 percent.
 
 ## What bloat is
 
@@ -106,12 +106,13 @@ Both features help at the moment a split would happen. Neither one repairs an in
 
 VACUUM prevents bloat. It does not remove existing bloat, except by trailing truncation. These are the rebuild tools:
 
-| Tool                 | Scope                   | Lock                                     | Extra disk      | Main risk                                            |
-| -------------------- | ----------------------- | ---------------------------------------- | --------------- | ---------------------------------------------------- |
-| VACUUM FULL          | Table + its indexes     | ACCESS EXCLUSIVE, full duration          | ~1x table copy  | Blocks all reads and writes until done               |
-| REINDEX CONCURRENTLY | Indexes only            | Brief locks at phase changes             | ~1x index copy  | Invalid `_ccnew` index on failure                    |
-| pg_repack            | Table + indexes, online | Brief ACCESS EXCLUSIVE at start and swap | ~1x table + WAL | Leftover artifacts on kill, DDL blocked during run   |
-| pg_squeeze           | Table + indexes, online | Brief lock at swap only                  | ~1x table + WAL | Needs `wal_level = logical` and a restart to install |
+| Tool                 | Scope                   | Lock                                     | Extra disk      | Main risk                                                        |
+| -------------------- | ----------------------- | ---------------------------------------- | --------------- | ---------------------------------------------------------------- |
+| VACUUM FULL          | Table + its indexes     | ACCESS EXCLUSIVE, full duration          | ~1x table copy  | Blocks all reads and writes until done                           |
+| REINDEX CONCURRENTLY | Indexes only            | Brief locks at phase changes             | ~1x index copy  | Invalid `_ccnew` index on failure                                |
+| pg_repack            | Table + indexes, online | Brief ACCESS EXCLUSIVE at start and swap | ~1x table + WAL | Leftover artifacts on kill, DDL blocked during run               |
+| pg_squeeze           | Table + indexes, online | Brief lock at swap only                  | ~1x table + WAL | Needs `wal_level = logical` and a restart to install             |
+| pg-osc               | Table + indexes, online | Brief ACCESS EXCLUSIVE at swap           | ~1x table + WAL | Runs outside the server, an interrupted run needs manual cleanup |
 
 **VACUUM FULL** rewrites the table into a new file and rebuilds all indexes. It removes all bloat. It holds an ACCESS EXCLUSIVE lock for the whole rewrite, which blocks reads and writes. On a 500 GB table that is hours of downtime. Use it only in a maintenance window, or on small tables. It also needs free disk for the full new copy.
 
@@ -127,7 +128,9 @@ Index bloat dominates in most deployments, so REINDEX CONCURRENTLY is the tool y
 
 **pg_squeeze** does the same job with logical decoding instead of triggers. A background worker inside Postgres copies the table, streams concurrent changes from a replication slot, and swaps with a short configurable lock. It can run on a schedule against registered tables. It needs `wal_level = logical`, a free replication slot, a replica identity (normally the primary key), and a restart to add it to `shared_preload_libraries`. It copies rows as stored, so it does not reclaim space from dropped columns.
 
-For both online tools, plan disk before you need them. You need free space for the full new table. A cluster at 95 percent disk from bloat can no longer run the tool that would fix it.
+**pg-osc** (pg-online-schema-change) is a client-side CLI, not an extension. It builds a shadow table, copies the rows, captures concurrent writes with triggers, and swaps the tables with a rename under a brief ACCESS EXCLUSIVE lock. Its purpose is the online schema change, and the removal of bloat is a side effect of the copy. It needs a primary key. It is the only option left when the provider installs no extensions at all. Because it runs outside the server, an interrupted run leaves the shadow table and its triggers for you to drop.
+
+For all online tools, plan disk before you need them. You need free space for the full new table. A cluster at 95 percent disk from bloat can no longer run the tool that would fix it.
 
 ## Acceptable bloat in practice
 
@@ -162,6 +165,7 @@ A workable policy for a large fleet: ignore objects under 1 GB, alert on estimat
 - https://boringsql.com/posts/the-bloat-busters-pg-repack-pg-squeeze/
 - https://www.cybertec-postgresql.com/en/products/pg_squeeze/
 - https://github.com/reorg/pg_repack
+- https://github.com/shayonj/pg-online-schema-change
 - https://kendralittle.com/2025/12/01/index-bloat-postgres-why-it-matters-how-to-identify-and-resolve/
 - https://postgres.ai/docs/postgres-howtos/database-administration/maintenance/how-to-deal-with-bloat
 - https://docs.crunchybridge.com/insights-metrics/bloat-and-vacuum

@@ -5,6 +5,8 @@ export interface TermEntry {
   blurb: string;
   tag: string;
   built: boolean;
+  /** Names people search for that this entry covers. Never a slug of its own. */
+  aliases?: string[];
 }
 
 // "Everything vacuum-adjacent that is worth knowing, in the order it tends to
@@ -301,19 +303,25 @@ export const TERMS: TermEntry[] = [
       "Side storage for oversized values. A separate table with its own autovacuum settings, tuned via the toast. prefix.",
   },
   {
-    slug: "pg_repack",
-    term: "pg_repack",
-    kind: "tool",
+    slug: "table-rewrite",
+    term: "table rewrite",
+    kind: "operation",
     built: true,
     tag: "page",
+    aliases: ["pg_repack", "pg_squeeze", "vacuum-full", "pg-osc"],
     blurb:
-      "Rewrites a bloated table online, holding only brief locks. What vacuum cannot do: give pages back.",
+      "The one operation that gives pages back to the disk. Four tools do it, and the lock is what separates them.",
   },
 ];
 
+/** A slug or any alias of it. The entry it returns is always the canonical one. */
+export function findTerm(slug: string): TermEntry | undefined {
+  return TERMS.find((t) => t.slug === slug || t.aliases?.includes(slug));
+}
+
 export function termHref(slug: string): string {
-  const entry = TERMS.find((t) => t.slug === slug);
-  return entry ? `/explain/${slug}` : "/arcana";
+  const entry = findTerm(slug);
+  return entry ? `/explain/${entry.slug}` : "/arcana";
 }
 
 function trigrams(s: string): Set<string> {
@@ -337,7 +345,7 @@ export function suggestTerms(slug: string, count = 3): TermEntry[] {
       let score = 0;
       if (t.slug === q) score += 10;
       if (t.slug.startsWith(q) || q.startsWith(t.slug)) score += 0.5;
-      const own = trigrams(`${t.slug} ${t.term}`);
+      const own = trigrams([t.slug, t.term, ...(t.aliases ?? [])].join(" "));
       let hits = 0;
       for (const g of query) if (own.has(g)) hits++;
       score += hits / Math.max(1, query.size);
