@@ -1,6 +1,6 @@
 [
   {
-    "hash": "18d7a52",
+    "hash": "cc5d5a1",
     "date": "2026-08-03",
     "type": "fix",
     "scope": "tuner",
@@ -8,7 +8,7 @@
     "description": "build triggers on reltuples, stop trusting the current freeze limit"
   },
   {
-    "hash": "0dfbd9a",
+    "hash": "ef8b91c",
     "date": "2026-08-03",
     "type": "fix",
     "scope": "codec",
@@ -16,7 +16,7 @@
     "description": "checksum the fragment so a changed character reads as damage"
   },
   {
-    "hash": "bd7025f",
+    "hash": "61d80ab",
     "date": "2026-08-03",
     "type": "feat",
     "scope": null,
@@ -24,7 +24,7 @@
     "description": "/changelog, generated from the conventional commit history"
   },
   {
-    "hash": "22a233f",
+    "hash": "9384504",
     "date": "2026-08-03",
     "type": "fix",
     "scope": "tuner",
