@@ -1,5 +1,13 @@
 [
   {
+    "hash": "e36b596",
+    "date": "2026-08-03",
+    "type": "feat",
+    "scope": "explain",
+    "breaking": false,
+    "description": "replace the pg_repack page with a table-rewrite page"
+  },
+  {
     "hash": "cc5d5a1",
     "date": "2026-08-03",
     "type": "fix",
