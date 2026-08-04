@@ -14,11 +14,13 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "fflate": "^0.8.2",
     "mcp-handler": "^1.1.0",
     "next": "^15.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "redis": "^6.2.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

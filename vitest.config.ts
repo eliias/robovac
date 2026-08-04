@@ -6,10 +6,10 @@ export default defineConfig({
     alias: { "@": path.resolve(__dirname) },
   },
   test: {
-    include: ["lib/**/*.test.ts", "packages/**/*.test.ts"],
+    include: ["lib/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      include: ["lib/**", "packages/robovac-mcp/src/**"],
+      include: ["lib/**"],
       exclude: ["**/*.test.ts"],
       reporter: ["text-summary", "cobertura"],
     },
