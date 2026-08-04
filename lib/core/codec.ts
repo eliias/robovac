@@ -9,9 +9,9 @@ export interface ReportPayload {
 
 /**
  * What went wrong, precisely enough for a full-page state:
- * empty (B3), truncated (B1, with byte counts on v2+ links),
- * version (B2), invalid (B4, with the decoded payload for copy-back),
- * damaged (B5, v3 links whose checksum does not match: characters were
+ * empty (B3), truncated (B1, with byte counts once the length prefix
+ * arrived), version (B2), invalid (B4, with the decoded payload for
+ * copy-back), damaged (B5, the checksum does not match: characters were
  * changed in transit, usually by a re-typed URL).
  */
 export type CodecErrorKind = "empty" | "truncated" | "version" | "invalid" | "damaged";
@@ -21,7 +21,7 @@ export class CodecError extends Error {
   issues: string[];
   /** Fragment bytes that arrived (truncated only). */
   received?: number;
-  /** Fragment bytes the length prefix promised (truncated v2 links only). */
+  /** Fragment bytes the length prefix promised (truncated only). */
   expected?: number;
   /** The decoded JSON text (invalid only), for "copy the raw payload". */
   payloadText?: string;
@@ -41,11 +41,11 @@ export class CodecError extends Error {
   }
 }
 
-// v3 prepends the payload length and an FNV-1a checksum, both base36. The
-// length lets a truncated link say how much is missing; the checksum tells
-// a changed character (a re-typed URL) apart from a bad payload, because a
-// one-character change can still inflate into valid-looking JSON. v1 (bare)
-// and v2 (length only) links still decode.
+// A fragment is version.length.checksum.payload. The length lets a truncated
+// link say how much is missing; the FNV-1a checksum tells a changed character
+// (a re-typed URL) apart from a bad payload, because a one-character change
+// can still inflate into valid-looking JSON. Length and checksum are base36,
+// the payload is base64url, so only the header carries dots.
 const CODEC_VERSION = "3";
 
 function fnv1a(s: string): number {
@@ -83,55 +83,41 @@ export function encodeReport(payload: ReportPayload): string {
 export function decodeReport(fragment: string): ReportPayload {
   const raw = fragment.startsWith("#") ? fragment.slice(1) : fragment;
   if (!raw) throw new CodecError("empty", ["the fragment is empty"]);
-  const dot = raw.indexOf(".");
-  if (dot < 1) throw new CodecError("truncated", ["the fragment has no codec version prefix"]);
-  const version = raw.slice(0, dot);
-
-  let data: string;
-  if (version === "1") {
-    data = raw.slice(dot + 1);
-  } else if (version === "2" || version === "3") {
-    let rest = raw.slice(dot + 1);
-    const dot2 = rest.indexOf(".");
-    if (dot2 < 1) {
-      throw new CodecError("truncated", ["the fragment lost its length prefix"], {
-        received: rest.length,
-      });
-    }
-    const expected = parseInt(rest.slice(0, dot2), 36);
-    rest = rest.slice(dot2 + 1);
-
-    let checksum: string | undefined;
-    if (version === "3") {
-      const dot3 = rest.indexOf(".");
-      if (dot3 < 1) {
-        throw new CodecError("truncated", ["the fragment lost its checksum prefix"], {
-          received: rest.length,
-        });
-      }
-      checksum = rest.slice(0, dot3);
-      rest = rest.slice(dot3 + 1);
-    }
-
-    // Chat clients glue punctuation to URLs; the length prefix says where
-    // the payload ends and the checksum below proves the cut is right.
-    data = rest.length > expected ? rest.slice(0, expected) : rest;
-    if (!Number.isFinite(expected) || data.length < expected) {
-      throw new CodecError(
-        "truncated",
-        [`the fragment carries ${data.length} of ${expected} bytes`],
-        { received: data.length, expected },
-      );
-    }
-    if (checksum !== undefined && fnv1a(data).toString(36) !== checksum) {
-      throw new CodecError(
-        "damaged",
-        ["the fragment has the right length but its content does not match its checksum"],
-        { received: data.length, expected },
-      );
-    }
-  } else {
+  const parts = raw.split(".");
+  const [version, lengthText, checksum] = parts;
+  if (!version || parts.length < 2) {
+    throw new CodecError("truncated", ["the fragment has no codec version prefix"]);
+  }
+  if (version !== CODEC_VERSION) {
     throw new CodecError("version", [`unknown codec version "${version}"`]);
+  }
+  if (parts.length < 4) {
+    throw new CodecError("truncated", ["the fragment lost its length or checksum prefix"], {
+      received: raw.length,
+    });
+  }
+
+  // Chat clients glue punctuation to URLs; the length prefix says where the
+  // payload ends and the checksum below proves the cut is right.
+  const expected = parseInt(lengthText, 36);
+  const rest = parts.slice(3).join(".");
+  const data = rest.length > expected ? rest.slice(0, expected) : rest;
+  if (!Number.isFinite(expected) || data.length < expected) {
+    throw new CodecError(
+      "truncated",
+      [`the fragment carries ${data.length} of ${expected} bytes`],
+      {
+        received: data.length,
+        expected,
+      },
+    );
+  }
+  if (fnv1a(data).toString(36) !== checksum) {
+    throw new CodecError(
+      "damaged",
+      ["the fragment has the right length but its content does not match its checksum"],
+      { received: data.length, expected },
+    );
   }
 
   let payloadText: string;

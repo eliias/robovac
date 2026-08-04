@@ -23,9 +23,9 @@ describe("codec", () => {
   });
 
   it("rejects garbage", () => {
-    expect(() => decodeReport("1.garbage")).toThrow(CodecError);
+    expect(() => decodeReport("3.garbage")).toThrow(CodecError);
     try {
-      decodeReport("1.garbage");
+      decodeReport("3.garbage");
     } catch (e) {
       expect((e as CodecError).issues.length).toBeGreaterThan(0);
     }
@@ -105,7 +105,7 @@ describe("codec error kinds", () => {
     }
   });
 
-  it("B1: a truncated v2 link reports received and expected bytes", () => {
+  it("B1: a truncated link reports received and expected bytes", () => {
     const full = encodeReport({ snap: DEMO_SNAPSHOT });
     const cut = full.slice(0, Math.floor(full.length * 0.45));
     try {
@@ -140,14 +140,16 @@ describe("codec error kinds", () => {
     }
   });
 
-  it("still decodes a v1 link", () => {
-    const [, , , data] = encodeReport({ snap: DEMO_SNAPSHOT }).split(".");
-    expect(decodeReport("1." + data)).toEqual({ snap: DEMO_SNAPSHOT });
-  });
-
-  it("still decodes a v2 link", () => {
-    const [, len, , data] = encodeReport({ snap: DEMO_SNAPSHOT }).split(".");
-    expect(decodeReport(`2.${len}.${data}`)).toEqual({ snap: DEMO_SNAPSHOT });
+  it("B2: a link from an older codec has kind version", () => {
+    const [, len, sum, data] = encodeReport({ snap: DEMO_SNAPSHOT }).split(".");
+    for (const old of [`1.${data}`, `2.${len}.${data}`, `2.${len}.${sum}.${data}`]) {
+      try {
+        decodeReport(old);
+        throw new Error("expected CodecError");
+      } catch (e) {
+        expect((e as CodecError).kind).toBe("version");
+      }
+    }
   });
 
   it("B5: a changed character reports kind damaged, not invalid", () => {
@@ -166,7 +168,7 @@ describe("codec error kinds", () => {
     }
   });
 
-  it("decodes a v3 link with junk glued to the end", () => {
+  it("decodes a link with junk glued to the end", () => {
     // Chat clients append punctuation to URLs. The length prefix says
     // where the payload ends and the checksum proves the cut is right.
     const full = encodeReport({ snap: DEMO_SNAPSHOT });

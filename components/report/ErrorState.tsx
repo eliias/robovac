@@ -203,8 +203,8 @@ function VersionState({ error }: { error: CodecError }) {
       <Eyebrow label="LINK OUTDATED" warn />
       <Title>This link was built by a different robovac.</Title>
       <Body>
-        {error.issues[0]}. This build reads versions 1 through 3. A report is a set of numbers
-        people act on, so robovac refuses to render one that would be missing parts of itself.
+        {error.issues[0]}. This build reads version 3 only. A report is a set of numbers people
+        act on, so robovac refuses to render one that would be missing parts of itself.
       </Body>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
         <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
@@ -316,9 +316,9 @@ function InvalidState({ error }: { error: CodecError }) {
         </pre>
       )}
       <Footer>
-        Ranges are validated on decode, not at first use. Links older than codec v3 carry no
-        checksum, so a character changed in transit (a re-typed URL) can also land here: if the
-        payload looks garbled rather than wrong, copy the URL again from where it was made.
+        Ranges are validated on decode, not at first use. Every link carries a checksum, so a
+        character changed in transit reads as damage, never as a bad payload: what is listed above
+        is what the builder actually sent.
       </Footer>
     </div>
   );
