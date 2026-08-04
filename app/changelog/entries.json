@@ -1,131 +1,27 @@
 [
   {
-    "hash": "926f7ac",
+    "hash": "0259d6a",
     "date": "2026-08-04",
-    "type": "fix",
-    "scope": "privacy",
-    "breaking": false,
-    "description": "sanitize the analytics referrer as well as the url"
-  },
-  {
-    "hash": "785b915",
-    "date": "2026-08-04",
-    "type": "fix",
-    "scope": "build",
-    "breaking": false,
-    "description": "drop the deleted mcp package from the mise build task"
-  },
-  {
-    "hash": "f7b8216",
-    "date": "2026-08-04",
-    "type": "fix",
+    "type": "refactor",
     "scope": "mcp",
-    "breaking": false,
-    "description": "cap report writes per ip, not every request"
+    "breaking": true,
+    "description": "name the hint parameters after the schema fields"
   },
   {
-    "hash": "79d8a92",
+    "hash": "331b38f",
     "date": "2026-08-04",
     "type": "fix",
-    "scope": "mcp",
+    "scope": "codec",
     "breaking": false,
-    "description": "keep the store-free tools alive when redis is down"
+    "description": "read one link version"
   },
   {
-    "hash": "70e004d",
-    "date": "2026-08-04",
-    "type": "fix",
-    "scope": "links",
-    "breaking": false,
-    "description": "make both stores return null for anything that is not a stored link"
-  },
-  {
-    "hash": "5c4706b",
-    "date": "2026-08-04",
-    "type": "fix",
-    "scope": "privacy",
-    "breaking": false,
-    "description": "keep report ids and fragments out of analytics"
-  },
-  {
-    "hash": "072419f",
-    "date": "2026-08-04",
-    "type": "fix",
-    "scope": "mcp",
-    "breaking": false,
-    "description": "fall through empty forwarded-for headers instead of sharing a counter"
-  },
-  {
-    "hash": "8712ef1",
+    "hash": "5706a7f",
     "date": "2026-08-04",
     "type": "feat",
     "scope": "mcp",
     "breaking": false,
-    "description": "return a short url and a permalink from create_report"
-  },
-  {
-    "hash": "d26a376",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "mcp",
-    "breaking": false,
-    "description": "cap requests per ip and reject oversized snapshots"
-  },
-  {
-    "hash": "6c81264",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "report",
-    "breaking": false,
-    "description": "serve a stored report at /r/<id>"
-  },
-  {
-    "hash": "33e2157",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "report",
-    "breaking": false,
-    "description": "the expired short link state"
-  },
-  {
-    "hash": "ee79425",
-    "date": "2026-08-04",
-    "type": "fix",
-    "scope": "links",
-    "breaking": false,
-    "description": "handle a failed redis connect instead of crashing the process"
-  },
-  {
-    "hash": "997a2c4",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "links",
-    "breaking": false,
-    "description": "select the store from REDIS_URL, fail loudly in production"
-  },
-  {
-    "hash": "013672f",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "links",
-    "breaking": false,
-    "description": "the redis store"
-  },
-  {
-    "hash": "ab22a2c",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "links",
-    "breaking": false,
-    "description": "the development file store"
-  },
-  {
-    "hash": "d1c796c",
-    "date": "2026-08-04",
-    "type": "feat",
-    "scope": "links",
-    "breaking": false,
-    "description": "the link store interface and the 12-character id"
+    "description": "return a short report url next to the permalink"
   },
   {
     "hash": "e36b596",
