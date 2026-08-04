@@ -20,11 +20,11 @@ Two PRs, not stacked. PR 1 deletes `packages/robovac-mcp` and moves its files in
 
 The move follows what each file is, not where it sat:
 
-| From | To |
-| --- | --- |
-| `src/report.ts` (+ test) | `lib/core/report.ts` |
+| From                      | To                    |
+| ------------------------- | --------------------- |
+| `src/report.ts` (+ test)  | `lib/core/report.ts`  |
 | `src/queries.ts` (+ test) | `lib/core/queries.ts` |
-| `src/tools.ts` | `lib/mcp/tools.ts` |
+| `src/tools.ts`            | `lib/mcp/tools.ts`    |
 
 `report.ts` exports `bindingTrigger`, `insertPeriodDays`, `buildSnapshot` and `verdict`. The report UI calls the first two. `queries.ts` builds SQL that `HomeView` also renders. Neither is MCP. `tools.ts` is.
 
@@ -120,17 +120,17 @@ This lives in `components/report/ErrorState.tsx` next to the codec states, keyed
 
 The no-server-state promise is load-bearing in nine places. Every one is now false and gets rewritten:
 
-| File | The claim that breaks |
-| --- | --- |
-| `components/home/HomeView.tsx:624` | "the paste never reaches a server" |
-| `components/report/ErrorState.tsx:168` | "robovac never had a copy of it" |
-| `app/mcp/page.tsx:69` | "robovac itself needs nothing: no DATABASE_URL, no env, no connection" |
-| `app/mcp/page.tsx:191` | the fragment footnote, which describes one link form |
-| `app/api/[transport]/route.ts:5` | "no auth, no storage" |
-| `app/robots.txt/route.ts:3` | the comment, plus `Disallow: /r/` |
-| `app/sitemap.xml/route.ts:5` | "fragment-only payload" |
-| `docs/design-brief.md:13` | "The link contains all data (URL fragment, no server state)" |
-| `docs/seo.md:11,20` | the whole fragment argument, and option (b) which this supersedes |
+| File                                   | The claim that breaks                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------- |
+| `components/home/HomeView.tsx:624`     | "the paste never reaches a server"                                     |
+| `components/report/ErrorState.tsx:168` | "robovac never had a copy of it"                                       |
+| `app/mcp/page.tsx:69`                  | "robovac itself needs nothing: no DATABASE_URL, no env, no connection" |
+| `app/mcp/page.tsx:191`                 | the fragment footnote, which describes one link form                   |
+| `app/api/[transport]/route.ts:5`       | "no auth, no storage"                                                  |
+| `app/robots.txt/route.ts:3`            | the comment, plus `Disallow: /r/`                                      |
+| `app/sitemap.xml/route.ts:5`           | "fragment-only payload"                                                |
+| `docs/design-brief.md:13`              | "The link contains all data (URL fragment, no server state)"           |
+| `docs/seo.md:11,20`                    | the whole fragment argument, and option (b) which this supersedes      |
 
 What stays true and stays written: robovac has no database driver, never runs your SQL, and reads no `DATABASE_URL`. Only the storage claim changes. The new line is that a short link stores the report for 30 days and the permalink stores nothing.
 

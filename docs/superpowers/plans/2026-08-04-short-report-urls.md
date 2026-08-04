@@ -27,24 +27,24 @@ Spec: `docs/superpowers/specs/2026-08-04-short-report-urls-design.md`.
 
 **Phase 1 moves (no content change beyond import paths):**
 
-| From | To |
-| --- | --- |
-| `packages/robovac-mcp/src/report.ts` | `lib/core/report.ts` |
-| `packages/robovac-mcp/src/report.test.ts` | `lib/core/report.test.ts` |
-| `packages/robovac-mcp/src/queries.ts` | `lib/core/queries.ts` |
+| From                                       | To                         |
+| ------------------------------------------ | -------------------------- |
+| `packages/robovac-mcp/src/report.ts`       | `lib/core/report.ts`       |
+| `packages/robovac-mcp/src/report.test.ts`  | `lib/core/report.test.ts`  |
+| `packages/robovac-mcp/src/queries.ts`      | `lib/core/queries.ts`      |
 | `packages/robovac-mcp/src/queries.test.ts` | `lib/core/queries.test.ts` |
-| `packages/robovac-mcp/src/tools.ts` | `lib/mcp/tools.ts` |
+| `packages/robovac-mcp/src/tools.ts`        | `lib/mcp/tools.ts`         |
 
 **Phase 2 new files:**
 
-| File | Responsibility |
-| --- | --- |
-| `lib/links/store.ts` | The `LinkStore` interface, the TTL constant, the id generator. No I/O. |
-| `lib/links/file-store.ts` | Development. One JSON file. |
-| `lib/links/redis-store.ts` | Production. Two Redis commands, plus the shared client. |
-| `lib/links/rate-limit.ts` | One counter per IP per hour. No-op without Redis. |
-| `lib/links/index.ts` | Picks an implementation from the environment. |
-| `app/r/[id]/page.tsx` | Reads the store, renders the report or the expired state. |
+| File                       | Responsibility                                                         |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `lib/links/store.ts`       | The `LinkStore` interface, the TTL constant, the id generator. No I/O. |
+| `lib/links/file-store.ts`  | Development. One JSON file.                                            |
+| `lib/links/redis-store.ts` | Production. Two Redis commands, plus the shared client.                |
+| `lib/links/rate-limit.ts`  | One counter per IP per hour. No-op without Redis.                      |
+| `lib/links/index.ts`       | Picks an implementation from the environment.                          |
+| `app/r/[id]/page.tsx`      | Reads the store, renders the report or the expired state.              |
 
 ---
 
@@ -53,12 +53,14 @@ Spec: `docs/superpowers/specs/2026-08-04-short-report-urls-design.md`.
 ### Task 1: Move the sources into the app
 
 **Files:**
+
 - Move: the five files in the Phase 1 table above
 - Modify: `app/api/[transport]/route.ts:2`, `components/home/HomeView.tsx:13-14`, `components/report/ReportView.tsx:19`
 - Modify: `Dockerfile:4-5`, `vitest.config.ts:9,12`, `tsconfig.json:20`, `.oxlintrc.json:16`, `package.json`
 - Delete: `packages/`, `pnpm-workspace.yaml`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `@/lib/core/report` exports `Row`, `insertPeriodDays`, `bindingTrigger`, `buildSnapshot`, `verdict`. `@/lib/core/queries` exports `snapshotSql`, `candidatesSql`. `@/lib/mcp/tools` exports `registerTools(server: McpServer): void`.
 
@@ -175,9 +177,11 @@ git commit -m "refactor(mcp): move the mcp sources into the app, delete the fake
 `robovac-mcp` is not on npm (`npm view robovac-mcp` returns 404), so the page advertises an install nobody can run.
 
 **Files:**
+
 - Modify: `app/mcp/page.tsx:34-35`, `app/mcp/page.tsx:114`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: nothing.
 
@@ -249,10 +253,12 @@ Wait for PR 1 to merge before starting Task 3. Then `git checkout main && git pu
 ### Task 3: The store interface and the id
 
 **Files:**
+
 - Create: `lib/links/store.ts`
 - Test: `lib/links/store.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `LINK_TTL_MS: number`, `LINK_TTL_SECONDS: number`, `interface StoredLink { fragment: string; expiresAt: number }`, `interface LinkStore { put(fragment: string): Promise<{ id: string; expiresAt: number }>; get(id: string): Promise<StoredLink | null> }`, `newId(): string`.
 
@@ -341,10 +347,12 @@ git commit -m "feat(links): the link store interface and the 12-character id"
 ### Task 4: The file store
 
 **Files:**
+
 - Create: `lib/links/file-store.ts`
 - Test: `lib/links/file-store.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LINK_TTL_MS`, `newId`, `LinkStore`, `StoredLink` from `./store`.
 - Produces: `fileStore(path: string): LinkStore`.
 
@@ -492,9 +500,11 @@ git commit -m "feat(links): the development file store"
 ### Task 5: The Redis store
 
 **Files:**
+
 - Create: `lib/links/redis-store.ts`
 
 **Interfaces:**
+
 - Consumes: `LINK_TTL_MS`, `LINK_TTL_SECONDS`, `newId`, `LinkStore`, `StoredLink` from `./store`. `createClient` from `redis`.
 - Produces: `redisStore(url: string): LinkStore`, `redisClient(url: string): RedisClientType` (memoized, reused by the rate limiter in Task 11).
 
@@ -565,10 +575,12 @@ git commit -m "feat(links): the redis store"
 ### Task 6: Pick a store from the environment
 
 **Files:**
+
 - Create: `lib/links/index.ts`
 - Test: `lib/links/index.test.ts`
 
 **Interfaces:**
+
 - Consumes: `fileStore` from `./file-store`, `redisStore` from `./redis-store`, `LinkStore` from `./store`.
 - Produces: `linkStore(): LinkStore`.
 
@@ -676,9 +688,11 @@ git commit -m "feat(links): select the store from REDIS_URL, fail loudly in prod
 Today `ReportView` reads `window.location.hash` inside a `useEffect`, so where the payload comes from is welded to how the report renders. Split those.
 
 **Files:**
+
 - Modify: `components/report/ReportView.tsx:61-90`, and the render root at `:255`
 
 **Interfaces:**
+
 - Consumes: `NoticeBar` from `@/components/report/states` (already imported in this file).
 - Produces: `ReportView(props?: { fragment?: string; expiresInDays?: number })`.
 
@@ -703,7 +717,7 @@ export function ReportView({
 Inside the first `useEffect` (line 80), replace the decode line:
 
 ```tsx
-      const p = decodeReport(window.location.hash || fragment || "");
+const p = decodeReport(window.location.hash || fragment || "");
 ```
 
 and change the dependency array on line 90 from `[]` to `[fragment]`.
@@ -713,17 +727,19 @@ and change the dependency array on line 90 from `[]` to `[fragment]`.
 In the render root at line 255, immediately after the closing `)}` of the `{snap.demo && ( … )}` block, insert:
 
 ```tsx
-      {expiresInDays !== undefined && (
-        <div style={{ paddingTop: 16 }}>
-          <NoticeBar
-            severity="neutral"
-            title="short link"
-            body={`This link stops working in ${expiresInDays} ${
-              expiresInDays === 1 ? "day" : "days"
-            }. The permalink in the MCP result has no expiry, keep that one if you file this somewhere.`}
-          />
-        </div>
-      )}
+{
+  expiresInDays !== undefined && (
+    <div style={{ paddingTop: 16 }}>
+      <NoticeBar
+        severity="neutral"
+        title="short link"
+        body={`This link stops working in ${expiresInDays} ${
+          expiresInDays === 1 ? "day" : "days"
+        }. The permalink in the MCP result has no expiry, keep that one if you file this somewhere.`}
+      />
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 3: Verify the permalink path is untouched**
@@ -743,9 +759,11 @@ git commit -m "refactor(report): take the payload from a prop when there is no h
 ### Task 8: The expired state
 
 **Files:**
+
 - Modify: `components/report/ErrorState.tsx` (add one exported component, leave `ErrorState` alone)
 
 **Interfaces:**
+
 - Consumes: the local `Eyebrow`, `Title`, `Body`, `Footer` helpers already in the file, `C`, `MONO`, `primaryButton` from `@/components/ui`.
 - Produces: `ExpiredState(): JSX.Element`.
 
@@ -804,10 +822,12 @@ git commit -m "feat(report): the expired short link state"
 ### Task 9: The /r/[id] route
 
 **Files:**
+
 - Create: `app/r/[id]/page.tsx`
 - Modify: `app/robots.txt/route.ts`, `app/sitemap.xml/route.ts:5`
 
 **Interfaces:**
+
 - Consumes: `linkStore` from `@/lib/links`, `ReportView` from `@/components/report/ReportView`, `ExpiredState` from `@/components/report/ErrorState`, `social` from `@/lib/social`.
 - Produces: the route. Nothing imports it.
 
@@ -901,10 +921,12 @@ git commit -m "feat(report): serve a stored report at /r/<id>"
 ### Task 10: Return both links from create_report
 
 **Files:**
+
 - Modify: `lib/mcp/tools.ts` (the `registerTools` signature, the `create_report` handler around line 141, the `json` result block)
 - Modify: `app/api/[transport]/route.ts:7`
 
 **Interfaces:**
+
 - Consumes: `LinkStore` and `linkStore` from `@/lib/links`.
 - Produces: `registerTools(server: McpServer, store: LinkStore): void`. The `create_report` result gains `permalink` and `expires_at`, and `url` changes meaning from the permalink to the short link.
 
@@ -930,21 +952,21 @@ Note: `MAX_FRAGMENT_BYTES` does not exist yet, it arrives in Task 11. Write the 
 Replace line 141:
 
 ```ts
-      const url = `${base_url ?? DEFAULT_BASE_URL}/report#${encodeReport({ snap })}`;
+const url = `${base_url ?? DEFAULT_BASE_URL}/report#${encodeReport({ snap })}`;
 ```
 
 with:
 
 ```ts
-      const base = base_url ?? DEFAULT_BASE_URL;
-      const fragment = encodeReport({ snap });
-      // A table name is free text, so a hostile row can inflate the payload.
-      if (fragment.length > MAX_FRAGMENT_BYTES) {
-        return json({ error: "snapshot too large to store", bytes: fragment.length });
-      }
-      const { id, expiresAt } = await store.put(fragment);
-      const url = `${base}/r/${id}`;
-      const permalink = `${base}/report#${fragment}`;
+const base = base_url ?? DEFAULT_BASE_URL;
+const fragment = encodeReport({ snap });
+// A table name is free text, so a hostile row can inflate the payload.
+if (fragment.length > MAX_FRAGMENT_BYTES) {
+  return json({ error: "snapshot too large to store", bytes: fragment.length });
+}
+const { id, expiresAt } = await store.put(fragment);
+const url = `${base}/r/${id}`;
+const permalink = `${base}/report#${fragment}`;
 ```
 
 - [ ] **Step 3: Return the new fields**
@@ -1011,10 +1033,12 @@ The hosted `/mcp` is the only public write path. Two separate limits with two na
 Scope note, differing from the spec: the counter caps **all** MCP requests per IP, not only writes. The route cannot see which tool a request will call without parsing the JSON-RPC body, and that parse is not worth the entanglement.
 
 **Files:**
+
 - Create: `lib/links/rate-limit.ts`
 - Modify: `app/api/[transport]/route.ts`
 
 **Interfaces:**
+
 - Consumes: `redisClient` from `./redis-store`.
 - Produces: `MAX_FRAGMENT_BYTES: number`, `MAX_REQUESTS_PER_HOUR: number`, `allow(ip: string): Promise<boolean>`.
 
@@ -1095,11 +1119,13 @@ git commit -m "feat(mcp): cap requests per ip and reject oversized snapshots"
 Nine claims are now false. What stays true and stays written: robovac has no database driver, never runs your SQL, and reads no `DATABASE_URL`. Only the storage claim changes.
 
 **Files:**
+
 - Modify: `components/home/HomeView.tsx:624`, `components/report/ErrorState.tsx:167-169`, `app/mcp/page.tsx:69`, `app/mcp/page.tsx:191`, `docs/design-brief.md:13`, `docs/seo.md:11,20`
 
 `app/api/[transport]/route.ts:5`, `app/robots.txt/route.ts:3` and `app/sitemap.xml/route.ts:5` were already fixed in Tasks 9 and 10.
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: nothing.
 
@@ -1116,11 +1142,11 @@ Nine claims are now false. What stays true and stays written: robovac has no dat
 `components/report/ErrorState.tsx`, the `Footer` at lines 167-169. "robovac never had a copy of it" is no longer true for a short link:
 
 ```tsx
-      <Footer>
-        Ask whoever sent it to copy the link again (the copy button on the report writes the whole
-        thing). A short link would not fail this way, so this one is a permalink and its payload
-        travelled in the URL.
-      </Footer>
+<Footer>
+  Ask whoever sent it to copy the link again (the copy button on the report writes the whole thing).
+  A short link would not fail this way, so this one is a permalink and its payload travelled in the
+  URL.
+</Footer>
 ```
 
 - [ ] **Step 3: The /mcp grants card**
