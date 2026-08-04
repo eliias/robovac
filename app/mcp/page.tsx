@@ -32,7 +32,7 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
     title: "create_report",
     sig: "(first, second, …hints) → url + permalink",
-    body: "Takes the two result rows and returns two links (a short url that expires in 30 days, and a permalink that never does), the workload pattern, warnings, and the optimized settings with one reason per change. Optional hints (pattern, replication_lag_budget, storage, fk_heavy, …) sharpen the classification.",
+    body: "Takes the two result rows and returns two links (a short url that expires in 30 days, and a permalink that never does), the workload pattern, warnings, and the optimized settings with one reason per change. Optional hints (pattern, replicationLagBudget, storage, fkHeavy, …) sharpen the classification.",
   },
   {
     title: "get_candidates_sql",

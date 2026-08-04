@@ -682,7 +682,7 @@ function checkProposal(
     rates.deadPerDay > 0
   ) {
     warnings.push(
-      `Every threshold below derives from a ${Math.round(seconds)} second sample. On a bursty table that window measures the minute it ran in, not the workload: it can miss the real rate by several times in either direction. Re-sample 10-15 minutes apart, or pass measured_rates from monitoring.`,
+      `Every threshold below derives from a ${Math.round(seconds)} second sample. On a bursty table that window measures the minute it ran in, not the workload: it can miss the real rate by several times in either direction. Re-sample 10-15 minutes apart, or pass measuredRates from monitoring.`,
     );
   }
 

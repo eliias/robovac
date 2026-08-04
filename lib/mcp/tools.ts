@@ -21,7 +21,7 @@ const SNAPSHOT_INSTRUCTIONS =
   "between the two runs is what turns counters into rates. Leave 10-15 minutes: on a bursty " +
   "OLTP table a one-minute window measures the minute it ran in, and every proposed threshold " +
   "derives from it, so it can miss the real rate several times over. Better still, if you " +
-  "already have hours of monitoring data, pass measured_rates to create_report and the " +
+  "already have hours of monitoring data, pass measuredRates to create_report and the " +
   "sampling window stops mattering. Connect to the primary: replicas keep their own " +
   "pg_stat_user_tables counters, which read as zero there.";
 
@@ -45,101 +45,87 @@ const baseUrlInput = z
   .describe(`Base URL of the robovac web app (default ${DEFAULT_BASE_URL})`);
 
 /**
- * The hint parameters. Types and ranges come from HintsSchema, so a new hint
- * is declared once there. Only the snake_case wire name and the line that
- * reads it live here: that is the boundary this file owns.
+ * The hint parameters, wearing the names HintsSchema gives them. Only the
+ * sentence an agent reads lives here; the type and the range live in the
+ * schema, so a new hint is one entry there and one line here. Matching names
+ * are what lets create_report hand the parsed hints straight to
+ * buildSnapshot with no mapping step in between.
  */
 const hint = HintsSchema.shape;
+
+const HINT_PARAMS = {
+  pattern: hint.pattern.describe("Override the workload classifier when you know the pattern"),
+  replicationLagBudget: hint.replicationLagBudget.describe(
+    "How much vacuum I/O the replicas tolerate (default tight)",
+  ),
+  storage: hint.storage.describe("Storage class behind this table"),
+  ramBytes: hint.ramBytes.describe("Server RAM, enables cluster-level advice"),
+  maxWorkers: hint.maxWorkers.describe("Current autovacuum_max_workers"),
+  longTransactions: hint.longTransactions.describe("The workload holds multi-minute transactions"),
+  fkHeavy: hint.fkHeavy.describe("FK checks or SELECT FOR UPDATE dominate (multixact pressure)"),
+  measuredRates: hint.measuredRates.describe(
+    "Rates you already measured over hours (monitoring, vacuum logs). These replace the two-sample delta, which is the weakest input in the whole report on a bursty table.",
+  ),
+};
+
+/**
+ * Every tool takes a strict object, never the SDK's raw-shape shorthand. The
+ * shorthand strips arguments it does not recognise, so a misspelled or
+ * outdated parameter would come back as a report that quietly ignored it. A
+ * hint moves the proposals, so an unknown name has to be an error.
+ */
+const strict = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
 /**
  * The ip is the caller of this one request. Only create_report uses it: it is
  * the only tool that writes, so it is the only tool with a limit.
  */
 export function registerTools(server: McpServer, store: LinkStore, ip: string): void {
-  server.tool(
+  server.registerTool(
     "get_snapshot_sql",
-    "Return the read-only statistics SQL for one table. robovac never connects to a database: your agent runs this query twice on its own connection and passes both rows to create_report.",
     {
-      schema: z.string().describe("Schema name, e.g. public"),
-      table: z.string().describe("Table name"),
+      description:
+        "Return the read-only statistics SQL for one table. robovac never connects to a database: your agent runs this query twice on its own connection and passes both rows to create_report.",
+      inputSchema: strict({
+        schema: z.string().describe("Schema name, e.g. public"),
+        table: z.string().describe("Table name"),
+      }),
     },
     async ({ schema, table }) =>
       json({ sql: snapshotSql(schema, table), instructions: SNAPSHOT_INSTRUCTIONS }),
   );
 
-  server.tool(
+  server.registerTool(
     "get_candidates_sql",
-    "Return the read-only SQL that ranks tables by vacuum pressure (dead-tuple ratio plus xid age). Your agent runs it on its own connection to pick a table to snapshot.",
     {
-      limit: z.number().int().min(1).max(50).default(10),
+      description:
+        "Return the read-only SQL that ranks tables by vacuum pressure (dead-tuple ratio plus xid age). Your agent runs it on its own connection to pick a table to snapshot.",
+      inputSchema: strict({ limit: z.number().int().min(1).max(50).default(10) }),
     },
     async ({ limit }) => json({ sql: candidatesSql(limit) }),
   );
 
-  server.tool(
+  server.registerTool(
     "create_report",
-    "Build the robovac report from two snapshot rows (the get_snapshot_sql query, run twice). Returns two links (a short url that expires in 30 days, and a permalink that never does), a verdict, the workload pattern, warnings, optimized settings, and one reason per changed setting. Optional workload hints sharpen the classification.",
     {
-      first: z.record(z.unknown()).describe("Result row of the first get_snapshot_sql run"),
-      second: z.record(z.unknown()).describe("Result row of the second run, 30-60 s later"),
-      pattern: hint.pattern.describe("Override the workload classifier when you know the pattern"),
-      replication_lag_budget: hint.replicationLagBudget.describe(
-        "How much vacuum I/O the replicas tolerate (default tight)",
-      ),
-      storage: hint.storage,
-      ram_bytes: hint.ramBytes.describe("Server RAM, enables cluster-level advice"),
-      max_workers: hint.maxWorkers.describe("Current autovacuum_max_workers"),
-      long_transactions: hint.longTransactions.describe(
-        "The workload holds multi-minute transactions",
-      ),
-      fk_heavy: hint.fkHeavy.describe(
-        "FK checks or SELECT FOR UPDATE dominate (multixact pressure)",
-      ),
-      // The one hint whose inner keys are snake_case on the wire, so its
-      // shape is spelled out here instead of read off HintsSchema.
-      measured_rates: z
-        .object({
-          dead_per_day: z.number().nonnegative().optional(),
-          ins_per_day: z.number().nonnegative().optional(),
-          xid_per_day: z.number().positive().optional(),
-        })
-        .optional()
-        .describe(
-          "Rates you already measured over hours (monitoring, vacuum logs). These replace the two-sample delta, which is the weakest input in the whole report on a bursty table.",
-        ),
-      base_url: baseUrlInput,
+      description:
+        "Build the robovac report from two snapshot rows (the get_snapshot_sql query, run twice). Returns two links (a short url that expires in 30 days, and a permalink that never does), a verdict, the workload pattern, warnings, optimized settings, and one reason per changed setting. Optional workload hints sharpen the classification.",
+      inputSchema: strict({
+        first: z.record(z.unknown()).describe("Result row of the first get_snapshot_sql run"),
+        second: z.record(z.unknown()).describe("Result row of the second run, 30-60 s later"),
+        ...HINT_PARAMS,
+        baseUrl: baseUrlInput,
+      }),
     },
-    async ({
-      first,
-      second,
-      pattern,
-      replication_lag_budget,
-      storage,
-      ram_bytes,
-      max_workers,
-      long_transactions,
-      fk_heavy,
-      measured_rates,
-      base_url,
-    }) => {
-      const provided: Hints = {
-        pattern,
-        replicationLagBudget: replication_lag_budget,
-        storage,
-        ramBytes: ram_bytes,
-        maxWorkers: max_workers,
-        longTransactions: long_transactions,
-        fkHeavy: fk_heavy,
-        measuredRates: measured_rates && {
-          deadPerDay: measured_rates.dead_per_day,
-          insPerDay: measured_rates.ins_per_day,
-          xidPerDay: measured_rates.xid_per_day,
-        },
-      };
-      const hints = Object.values(provided).some((v) => v !== undefined) ? provided : undefined;
+    // Everything after first, second and baseUrl is a hint, and it already
+    // carries the field names Hints uses.
+    async ({ first, second, baseUrl, ...provided }) => {
+      const hints: Hints | undefined = Object.values(provided).some((v) => v !== undefined)
+        ? provided
+        : undefined;
       const snap = buildSnapshot(first, second, hints);
       const proposal = optimize(snap);
-      const base = base_url ?? DEFAULT_BASE_URL;
+      const base = baseUrl ?? DEFAULT_BASE_URL;
       const fragment = encodeReport({ snap });
       // A table name is free text, so a hostile row can inflate the payload.
       if (fragment.length > MAX_FRAGMENT_BYTES) {
@@ -186,14 +172,16 @@ export function registerTools(server: McpServer, store: LinkStore, ip: string): 
     },
   );
 
-  server.tool(
+  server.registerTool(
     "explain_term",
-    "Return the stable robovac explain URL for a vacuum term.",
     {
-      term: z.string().describe("A term slug, e.g. xmin or autovacuum_freeze_max_age"),
-      base_url: baseUrlInput,
+      description: "Return the stable robovac explain URL for a vacuum term.",
+      inputSchema: strict({
+        term: z.string().describe("A term slug, e.g. xmin or autovacuum_freeze_max_age"),
+        baseUrl: baseUrlInput,
+      }),
     },
-    async ({ term, base_url }) => {
+    async ({ term, baseUrl }) => {
       const slug = term.trim().toLowerCase().replaceAll(" ", "-");
       const entry = findTerm(slug);
       if (!entry) {
@@ -201,7 +189,7 @@ export function registerTools(server: McpServer, store: LinkStore, ip: string): 
           `unknown term "${term}". Known terms: ${TERMS.map((t) => t.slug).join(", ")}`,
         );
       }
-      return json({ url: `${base_url ?? DEFAULT_BASE_URL}${termHref(entry.slug)}` });
+      return json({ url: `${baseUrl ?? DEFAULT_BASE_URL}${termHref(entry.slug)}` });
     },
   );
 }
