@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * E1: on plain http:// or in a sandboxed frame, navigator.clipboard rejects
@@ -28,13 +28,4 @@ export function selectContents(el: Element | null): void {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
-}
-
-/** Focus outline for the block "select all" points at. */
-export function useSelectableBlock(ref: RefObject<Element | null>, canCopy: boolean) {
-  useEffect(() => {
-    if (canCopy || !(ref.current instanceof HTMLElement)) return;
-    ref.current.style.outline = "1px solid rgba(255,255,255,0.16)";
-    ref.current.style.outlineOffset = "-1px";
-  }, [ref, canCopy]);
 }

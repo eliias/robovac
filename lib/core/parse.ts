@@ -109,7 +109,7 @@ function fromCsv(text: string): PastedRow[] {
 }
 
 /** The snapshot-query columns a report cannot be built without, in query order. */
-export const REQUIRED_COLUMNS = [
+const REQUIRED_COLUMNS = [
   "relpages",
   "n_live_tup",
   "n_dead_tup",

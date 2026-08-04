@@ -6,8 +6,6 @@ node_modules/
 out/
 coverage/
 docs/
-packages/*/dist/
-packages/*/node_modules/
 Jenkinsfile
 *.md
 .env

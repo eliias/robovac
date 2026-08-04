@@ -40,7 +40,7 @@ export interface RunCost {
  * Both are stated assumptions, like the page mix in runCost, not
  * measurements. Old snapshots without relallvisible price the full heap.
  */
-export const INDEX_HEAP_FRACTION = 0.3;
+const INDEX_HEAP_FRACTION = 0.3;
 
 export function passPages(
   pages: number,
