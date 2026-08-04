@@ -84,13 +84,17 @@ Both implementations store the same JSON value, `{ fragment, expiresAt }`. The r
 
 `ReportView` needs one untangle. It reads `window.location.hash` inside a `useEffect` (`components/report/ReportView.tsx:80`), so where the payload comes from is welded to how the report renders. It gains an optional `fragment` prop and one rule: use the hash when there is one, else use the prop.
 
+It also gains an optional `expiresInDays` number, not the raw `expiresAt`. The server component computes the days left, so the client never reads the clock during hydration and cannot mismatch at a day boundary.
+
 That rule also settles the slider case for free. `ReportView.tsx:98` rewrites the URL to the tuned fragment when the reader moves a slider. On a short link that produces `/r/<id>#<fragment>`, which reloads correctly because the hash wins.
 
 `/r/` is `noindex` with the generic card, the same treatment `/report` gets at `app/report/page.tsx:9`, and `app/robots.txt/route.ts` adds `Disallow: /r/`. The trailing slash matters: a bare `/r` is a prefix match that also covers `/report`, which hides the intent.
 
 ### Rate limit
 
-The hosted `/mcp` is the only public write path, so the limit lands there and nowhere else. Redis `INCR rl:<ip>:<hour>` with `EX 3600`, capped at 60 writes per IP per hour. A fragment over 8 KB is rejected before the write. A normal link is about 900 bytes, so the cap only catches abuse.
+The hosted `/mcp` is the only public write path, so the limit lands there and nowhere else. Redis `INCR rl:<ip>:<hour>` with `EX 3600`, capped at 60 requests per IP per hour. The counter sits at the route, which sees the IP but not which tool a request targets, so it caps every MCP request rather than only the writes. Telling them apart needs a JSON-RPC body parse at the route, which buys little and entangles the route with the protocol.
+
+The payload cap sits inside `create_report`, which is the code that holds the fragment. Anything over 8 KB is rejected before the write. A normal link is about 900 bytes, and a table name is free text, so a hostile row is the case this catches.
 
 The file store skips both. Development has no attacker.
 
@@ -130,7 +134,9 @@ The no-server-state promise is load-bearing in nine places. Every one is now fal
 
 What stays true and stays written: robovac has no database driver, never runs your SQL, and reads no `DATABASE_URL`. Only the storage claim changes. The new line is that a short link stores the report for 30 days and the permalink stores nothing.
 
-The report page shows "expires in N days" when it loaded from `/r/`, and shows nothing when it loaded from a fragment.
+The report page shows "expires in N days" as a neutral `NoticeBar` when it loaded from `/r/`, and shows nothing when it loaded from a fragment.
+
+Also add `redis` to the root dependencies. It sits in the lockfile at 4.7.1 only because `mcp-handler` pulls it in, which is the same luck problem as the SDK type import.
 
 ## Verification
 
