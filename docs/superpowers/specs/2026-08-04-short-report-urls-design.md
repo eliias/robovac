@@ -62,7 +62,7 @@ Both implementations store the same JSON value, `{ fragment, expiresAt }`. The r
 
 ### Implementations
 
-`lib/links/redis-store.ts` uses `redis` (node-redis, already in the lockfile at 4.7.1 through `mcp-handler`). Two commands: `SET id <json> EX 2592000` and `GET id`. No collision check and no retry loop. At 72 bits the first collision arrives near 2^36 stored links, so guarding it is machinery for an event that does not happen.
+`lib/links/redis-store.ts` uses `redis` (node-redis 6.2.0, added as an explicit root dependency in PR 1). Two commands: `SET id <json> EX 2592000` and `GET id`. No collision check and no retry loop. At 72 bits the first collision arrives near 2^36 stored links, so guarding it is machinery for an event that does not happen.
 
 `lib/links/file-store.ts` keeps one JSON file at `.links-dev.json` in the repo root, added to `.gitignore`. It drops expired entries when it reads. Links survive a `next dev` module reload, so a real 30-day flow is testable locally.
 
@@ -136,7 +136,7 @@ What stays true and stays written: robovac has no database driver, never runs yo
 
 The report page shows "expires in N days" as a neutral `NoticeBar` when it loaded from `/r/`, and shows nothing when it loaded from a fragment.
 
-Also add `redis` to the root dependencies. It sits in the lockfile at 4.7.1 only because `mcp-handler` pulls it in, which is the same luck problem as the SDK type import.
+Also add `redis` to the root dependencies. It sat in the lockfile at 4.7.1 only because `mcp-handler` pulls it in, which is the same luck problem as the SDK type import. PR 1 added it explicitly and pnpm resolved 6.2.0, so the store uses that major's `SetOptions` shape.
 
 ## Verification
 

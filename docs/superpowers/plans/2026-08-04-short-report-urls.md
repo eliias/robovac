@@ -6,7 +6,7 @@
 
 **Architecture:** A `LinkStore` interface with two implementations, Redis for production and a JSON file for development, selected by `REDIS_URL` alone. A server component at `/r/[id]` reads the store and hands the fragment to the existing `ReportView`, which gains one rule: use the hash when there is one, else use the prop.
 
-**Tech Stack:** Next.js 15 (App Router), React 19, TypeScript, vitest, `redis` (node-redis v4), zod.
+**Tech Stack:** Next.js 15 (App Router), React 19, TypeScript, vitest, `redis` (node-redis 6.2.0), zod.
 
 Spec: `docs/superpowers/specs/2026-08-04-short-report-urls-design.md`.
 
@@ -19,7 +19,7 @@ Spec: `docs/superpowers/specs/2026-08-04-short-report-urls-design.md`.
 - **No semicolons as prose punctuation** in user-facing copy strings.
 - **Link lifetime is 30 days**, expressed once as a constant in `lib/links/store.ts`. Never a function parameter.
 - **`REDIS_URL` is the only switch.** Never add a second flag such as `USE_REDIS` or key the choice on `NODE_ENV` alone.
-- Verification after every task: `pnpm lint`, `pnpm test`, `pnpm build`.
+- Verification after every task, all four: `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm format:check`. `Jenkinsfile:54` runs the format check in CI, so a task that skips it can leave the branch red while lint and build pass.
 
 ---
 
@@ -506,7 +506,7 @@ git commit -m "feat(links): the development file store"
 **Interfaces:**
 
 - Consumes: `LINK_TTL_MS`, `LINK_TTL_SECONDS`, `newId`, `LinkStore`, `StoredLink` from `./store`. `createClient` from `redis`.
-- Produces: `redisStore(url: string): LinkStore`, `redisClient(url: string): RedisClientType` (memoized, reused by the rate limiter in Task 11).
+- Produces: `redisStore(url: string): LinkStore`, `redisClient(url: string): RedisClient` (memoized, reused by the rate limiter in Task 11), and the local type alias `type RedisClient = ReturnType<typeof createClient>`.
 
 No unit test here. There is no Redis in CI and mocking two commands proves nothing about the two commands. The file store carries the behaviour tests, this file stays short enough to read. Task 12's manual check exercises it.
 
@@ -515,18 +515,23 @@ No unit test here. There is no Redis in CI and mocking two commands proves nothi
 Create `lib/links/redis-store.ts`:
 
 ```ts
-import { createClient, type RedisClientType } from "redis";
+import { createClient } from "redis";
 import { LINK_TTL_MS, LINK_TTL_SECONDS, newId, type LinkStore, type StoredLink } from "./store";
 
-let client: RedisClientType | undefined;
+// Derived from createClient rather than the exported RedisClientType, whose
+// generic defaults differ between node-redis majors. This alias always matches
+// the installed version and needs no cast.
+export type RedisClient = ReturnType<typeof createClient>;
+
+let client: RedisClient | undefined;
 
 /**
  * One connection per process, shared with the rate limiter. Connect once and
- * hand out the same promise: node-redis queues commands until it is ready.
+ * hand out the same client: node-redis queues commands until it is ready.
  */
-export function redisClient(url: string): RedisClientType {
+export function redisClient(url: string): RedisClient {
   if (!client) {
-    client = createClient({ url }) as RedisClientType;
+    client = createClient({ url });
     client.on("error", (err) => console.error("[links] redis:", err));
     void client.connect();
   }
@@ -546,7 +551,9 @@ export function redisStore(url: string): LinkStore {
       const id = newId();
       const expiresAt = Date.now() + LINK_TTL_MS;
       const row: StoredLink = { fragment, expiresAt };
-      await redis.set(`link:${id}`, JSON.stringify(row), { EX: LINK_TTL_SECONDS });
+      await redis.set(`link:${id}`, JSON.stringify(row), {
+        expiration: { type: "EX", value: LINK_TTL_SECONDS },
+      });
       return { id, expiresAt };
     },
 
@@ -561,7 +568,7 @@ export function redisStore(url: string): LinkStore {
 - [ ] **Step 2: Verify it typechecks**
 
 Run: `pnpm lint && npx tsc --noEmit`
-Expected: no errors. If `{ EX: … }` is rejected, check the installed node-redis major with `npm ls redis`. v4 takes `{ EX: n }`, v5 and later take `{ expiration: { type: "EX", value: n } }`.
+Expected: no errors. The installed `redis` is 6.2.0, verified against its `SetOptions` type, which marks the flat `EX`, `PX`, `EXAT` and `PXAT` fields deprecated in favour of the nested `expiration` object used above. If a future bump rejects `expiration`, read `node_modules/.pnpm/@redis+client@*/node_modules/@redis/client/dist/lib/commands/SET.d.ts` for the current shape.
 
 - [ ] **Step 3: Commit**
 
