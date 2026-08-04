@@ -3,7 +3,7 @@ import { z } from "zod";
 import { encodeReport } from "@/lib/core/codec";
 import { optimize } from "@/lib/core/optimize";
 import { SETTINGS } from "@/lib/core/settings";
-import type { Hints } from "@/lib/core/snapshot";
+import { HintsSchema, type Hints } from "@/lib/core/snapshot";
 import { findTerm, TERMS, termHref } from "@/lib/terms";
 import { candidatesSql, snapshotSql } from "@/lib/core/queries";
 import { buildSnapshot, verdict } from "@/lib/core/report";
@@ -45,6 +45,13 @@ const baseUrlInput = z
   .describe(`Base URL of the robovac web app (default ${DEFAULT_BASE_URL})`);
 
 /**
+ * The hint parameters. Types and ranges come from HintsSchema, so a new hint
+ * is declared once there. Only the snake_case wire name and the line that
+ * reads it live here: that is the boundary this file owns.
+ */
+const hint = HintsSchema.shape;
+
+/**
  * The ip is the caller of this one request. Only create_report uses it: it is
  * the only tool that writes, so it is the only tool with a limit.
  */
@@ -75,34 +82,21 @@ export function registerTools(server: McpServer, store: LinkStore, ip: string): 
     {
       first: z.record(z.unknown()).describe("Result row of the first get_snapshot_sql run"),
       second: z.record(z.unknown()).describe("Result row of the second run, 30-60 s later"),
-      pattern: z
-        .enum(["append-only", "queue", "large-update-heavy", "mixed-oltp", "cold"])
-        .optional()
-        .describe("Override the workload classifier when you know the pattern"),
-      replication_lag_budget: z
-        .enum(["none", "tight", "relaxed"])
-        .optional()
-        .describe("How much vacuum I/O the replicas tolerate (default tight)"),
-      storage: z.enum(["ssd", "hdd"]).optional(),
-      ram_bytes: z
-        .number()
-        .positive()
-        .optional()
-        .describe("Server RAM, enables cluster-level advice"),
-      max_workers: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe("Current autovacuum_max_workers"),
-      long_transactions: z
-        .boolean()
-        .optional()
-        .describe("The workload holds multi-minute transactions"),
-      fk_heavy: z
-        .boolean()
-        .optional()
-        .describe("FK checks or SELECT FOR UPDATE dominate (multixact pressure)"),
+      pattern: hint.pattern.describe("Override the workload classifier when you know the pattern"),
+      replication_lag_budget: hint.replicationLagBudget.describe(
+        "How much vacuum I/O the replicas tolerate (default tight)",
+      ),
+      storage: hint.storage,
+      ram_bytes: hint.ramBytes.describe("Server RAM, enables cluster-level advice"),
+      max_workers: hint.maxWorkers.describe("Current autovacuum_max_workers"),
+      long_transactions: hint.longTransactions.describe(
+        "The workload holds multi-minute transactions",
+      ),
+      fk_heavy: hint.fkHeavy.describe(
+        "FK checks or SELECT FOR UPDATE dominate (multixact pressure)",
+      ),
+      // The one hint whose inner keys are snake_case on the wire, so its
+      // shape is spelled out here instead of read off HintsSchema.
       measured_rates: z
         .object({
           dead_per_day: z.number().nonnegative().optional(),
