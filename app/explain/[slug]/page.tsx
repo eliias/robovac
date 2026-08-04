@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { TermLink } from "@/components/TermLink";
-import { C, MONO, SANS, termLinkStyle } from "@/components/ui";
+import { Lede, PageHeader, PageNotes } from "@/components/kit";
+import { C, MONO, termLinkStyle } from "@/components/ui";
 import { CONTENT } from "@/lib/explain-content";
 import { findTerm, TERMS } from "@/lib/terms";
 import { requestOrigin } from "@/lib/origin";
@@ -71,30 +72,9 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/explain/{slug}</div>
-      <h1
-        className="page-h1"
-        style={{
-          fontFamily: MONO,
-          fontWeight: 500,
-          color: "#fff",
-          margin: "6px 0 0",
-        }}
-      >
-        {term.term}
-      </h1>
-      <p
-        style={{
-          maxWidth: 680,
-          fontFamily: SANS,
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: C.muted,
-          margin: "16px 0 0",
-        }}
-      >
-        {definition}
-      </p>
+      <PageHeader path={`/explain/${slug}`} title={term.term}>
+        <Lede>{definition}</Lede>
+      </PageHeader>
 
       {Panel && <Panel />}
 
@@ -137,20 +117,7 @@ export default async function ExplainPage({ params }: { params: Promise<{ slug: 
           ← back to start
         </Link>
       </div>
-      <div
-        style={{
-          marginTop: 30,
-          paddingTop: 12,
-          borderTop: `1px solid ${C.border08}`,
-          fontFamily: MONO,
-          fontSize: 10.5,
-          color: C.faint,
-          lineHeight: 1.6,
-          maxWidth: 760,
-        }}
-      >
-        {footnote}
-      </div>
+      <PageNotes>{footnote}</PageNotes>
     </div>
   );
 }

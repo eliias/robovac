@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Lede, PageHeader } from "@/components/kit";
 import { C, MONO, SANS } from "@/components/ui";
 import { social } from "@/lib/social";
 import entries from "./entries.json";
@@ -41,31 +42,12 @@ function byMonth(list: Entry[]): [string, Entry[]][] {
 export default function ChangelogPage() {
   return (
     <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
-      <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/changelog</div>
-      <h1
-        className="page-h1"
-        style={{
-          fontFamily: MONO,
-          fontWeight: 500,
-          color: "#fff",
-          margin: "6px 0 0",
-        }}
-      >
-        Changelog
-      </h1>
-      <p
-        style={{
-          maxWidth: 680,
-          fontFamily: SANS,
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: C.muted,
-          margin: "16px 0 0",
-        }}
-      >
-        Every feature, fix, and breaking change, read straight from the conventional commit history.
-        The rest of the history stays in git.
-      </p>
+      <PageHeader path="/changelog" title="Changelog">
+        <Lede>
+          Every feature, fix, and breaking change, read straight from the conventional commit
+          history. The rest of the history stays in git.
+        </Lede>
+      </PageHeader>
       {byMonth(entries as Entry[]).map(([month, group]) => (
         <section key={month}>
           <div

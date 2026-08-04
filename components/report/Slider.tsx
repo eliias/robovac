@@ -1,7 +1,7 @@
 "use client";
 
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { TermLink } from "@/components/TermLink";
+import { Track } from "@/components/Track";
 import { C, MONO } from "@/components/ui";
 import { useViewport } from "@/components/useViewport";
 import { fmtVal, fromPos, toPos } from "@/lib/core/format";
@@ -27,23 +27,6 @@ export function Slider({ def, value, current, proposed, note, onChange }: Slider
   const step = (direction: -1 | 1) => {
     const p = Math.min(1, Math.max(0, toPos(def, value) + direction * STEP));
     onChange(fromPos(def, p));
-  };
-
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const apply = (clientX: number) => {
-      const p = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-      onChange(fromPos(def, p));
-    };
-    const move = (ev: PointerEvent) => apply(ev.clientX);
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    apply(e.clientX);
   };
 
   return (
@@ -75,36 +58,7 @@ export function Slider({ def, value, current, proposed, note, onChange }: Slider
           <span style={{ color: C.faint, fontSize: 11 }}> {def.unit}</span>
         </div>
       </div>
-      <div
-        onPointerDown={onPointerDown}
-        style={{
-          position: "relative",
-          height: 24,
-          marginTop: 9,
-          cursor: "ew-resize",
-          touchAction: "none",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 11,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: "rgba(255,255,255,0.09)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: 11,
-            left: 0,
-            height: 2,
-            background: "rgba(255,255,255,0.34)",
-            width: pct(value),
-          }}
-        />
+      <Track fill={pct(value)} onPos={(p) => onChange(fromPos(def, p))}>
         <div
           style={{
             position: "absolute",
@@ -135,20 +89,7 @@ export function Slider({ def, value, current, proposed, note, onChange }: Slider
             left: pct(proposed),
           }}
         />
-        <div
-          style={{
-            position: "absolute",
-            top: 6,
-            width: 11,
-            height: 11,
-            marginLeft: -5.5,
-            borderRadius: 3,
-            background: "#fff",
-            boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
-            left: pct(value),
-          }}
-        />
-      </div>
+      </Track>
       {mobile && (
         <div style={{ display: "flex", gap: 8, margin: "6px 0 4px" }}>
           {([-1, 1] as const).map((direction) => (

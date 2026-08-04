@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
+import { StatGrid } from "@/components/kit";
+import { C, MONO, SANS } from "@/components/ui";
 import { selectContents, useClipboard } from "@/components/useClipboard";
 import type { CodecError } from "@/lib/core/codec";
 
@@ -94,48 +95,29 @@ function TruncatedState({ error }: { error: CodecError }) {
         ticket systems and mail clients cut long URLs there, so the report cannot be rebuilt from
         what arrived.
       </Body>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 1,
-          background: C.border08,
-          border: `1px solid ${C.border08}`,
-          marginTop: 16,
-        }}
-      >
-        <div style={{ background: C.cell, padding: "10px 12px" }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.03em" }}>
-            RECEIVED
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.strong, marginTop: 3 }}>
-            {error.received ?? 0} bytes
-          </div>
-        </div>
-        <div style={{ background: C.cell, padding: "10px 12px" }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.03em" }}>
-            EXPECTED
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.strong, marginTop: 3 }}>
-            {error.expected !== undefined ? (
-              <>{error.expected} bytes</>
-            ) : (
-              <>
-                —<span style={{ color: C.faint, fontSize: 11 }}> · no length prefix</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <StatGrid
+        columns={2}
+        style={{ marginTop: 16 }}
+        cells={[
+          { label: "RECEIVED", value: `${error.received ?? 0} bytes` },
+          {
+            label: "EXPECTED",
+            value:
+              error.expected !== undefined ? (
+                `${error.expected} bytes`
+              ) : (
+                <>
+                  —<span style={{ color: C.faint, fontSize: 11 }}> · no length prefix</span>
+                </>
+              ),
+          },
+        ]}
+      />
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+        <a className="btn-primary" href="/">
           → build a fresh report
         </a>
-        <button
-          className="btn-secondary"
-          onClick={() => setPasteOpen(true)}
-          style={secondaryButton}
-        >
+        <button className="btn-secondary" onClick={() => setPasteOpen(true)}>
           paste the whole URL instead
         </button>
       </div>
@@ -158,7 +140,7 @@ function TruncatedState({ error }: { error: CodecError }) {
               outline: "none",
             }}
           />
-          <button className="btn-secondary" onClick={openPasted} style={secondaryButton}>
+          <button className="btn-secondary" onClick={openPasted}>
             open
           </button>
         </div>
@@ -185,7 +167,7 @@ function DamagedState({ error }: { error: CodecError }) {
         robovac refuses to render it.
       </Body>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+        <a className="btn-primary" href="/">
           → build a fresh report
         </a>
       </div>
@@ -203,18 +185,14 @@ function VersionState({ error }: { error: CodecError }) {
       <Eyebrow label="LINK OUTDATED" warn />
       <Title>This link was built by a different robovac.</Title>
       <Body>
-        {error.issues[0]}. This build reads version 3 only. A report is a set of numbers people
-        act on, so robovac refuses to render one that would be missing parts of itself.
+        {error.issues[0]}. This build reads version 3 only. A report is a set of numbers people act
+        on, so robovac refuses to render one that would be missing parts of itself.
       </Body>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+        <a className="btn-primary" href="/">
           → build a fresh report
         </a>
-        <a
-          className="btn-secondary"
-          href="/mcp"
-          style={{ ...secondaryButton, textDecoration: "none" }}
-        >
+        <a className="btn-secondary" href="/mcp">
           how links are built
         </a>
       </div>
@@ -233,14 +211,10 @@ function EmptyState() {
         stripped entirely.
       </Body>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+        <a className="btn-primary" href="/">
           → build a report
         </a>
-        <a
-          className="btn-secondary"
-          href="/demo"
-          style={{ ...secondaryButton, textDecoration: "none" }}
-        >
+        <a className="btn-secondary" href="/demo">
           open a demo report
         </a>
       </div>
@@ -287,10 +261,10 @@ function InvalidState({ error }: { error: CodecError }) {
         ))}
       </div>
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-        <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+        <a className="btn-primary" href="/">
           → build one from the query
         </a>
-        <button className="btn-secondary" onClick={copyPayload} style={secondaryButton}>
+        <button className="btn-secondary" onClick={copyPayload}>
           {copied ? "copied" : canCopy ? "copy the raw payload" : "select the raw payload"}
         </button>
       </div>
@@ -356,7 +330,7 @@ export function ExpiredState() {
           robovac cannot tell the two apart, because it keeps no record of what it dropped.
         </Body>
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
-          <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+          <a className="btn-primary" href="/">
             → build a fresh report
           </a>
         </div>

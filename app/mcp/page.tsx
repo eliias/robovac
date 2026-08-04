@@ -1,16 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { social } from "@/lib/social";
-import {
-  C,
-  MONO,
-  SANS,
-  panel,
-  panelHeader,
-  primaryButton,
-  secondaryButton,
-  termLinkStyle,
-} from "@/components/ui";
+import { Footnotes, Lede, PageHeader, PanelHead } from "@/components/kit";
+import { C, MONO, SANS, panel, termLinkStyle } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Add robovac to your agent — robovac",
@@ -70,47 +62,21 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
 export default function McpPage() {
   return (
     <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
-      <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/mcp</div>
-      <h1
-        className="page-h1"
-        style={{
-          fontFamily: MONO,
-          fontWeight: 500,
-          color: "#fff",
-          margin: "6px 0 0",
-        }}
-      >
-        Add robovac to your agent
-      </h1>
-      <p
-        style={{
-          maxWidth: 680,
-          fontFamily: SANS,
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: C.muted,
-          margin: "16px 0 0",
-        }}
-      >
-        robovac is an MCP server with one job: turn a statistics snapshot of one table into a link.
-        It never connects to your database: it hands your agent a read-only{" "}
-        <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span>, the agent runs it twice
-        on its own connection, and robovac computes the report from the two result rows. There is no
-        account, no <span style={{ fontFamily: MONO, color: C.strong }}>DATABASE_URL</span>, and no
-        write path to your database. robovac stores two things: the report behind the short link for
-        30 days, and one report counter per IP address for the current hour.
-        <sup style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>1</sup>
-      </p>
+      <PageHeader path="/mcp" title="Add robovac to your agent">
+        <Lede>
+          robovac is an MCP server with one job: turn a statistics snapshot of one table into a
+          link. It never connects to your database: it hands your agent a read-only{" "}
+          <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span>, the agent runs it twice
+          on its own connection, and robovac computes the report from the two result rows. There is
+          no account, no <span style={{ fontFamily: MONO, color: C.strong }}>DATABASE_URL</span>,
+          and no write path to your database. robovac stores two things: the report behind the short
+          link for 30 days, and one report counter per IP address for the current hour.
+          <sup style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>1</sup>
+        </Lede>
+      </PageHeader>
 
       <div style={{ ...panel, marginTop: 26 }}>
-        <div style={panelHeader}>
-          <span
-            style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}
-          >
-            ADD TO YOUR AGENT
-          </span>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>streamable http</span>
-        </div>
+        <PanelHead title="ADD TO YOUR AGENT" caption="streamable http" />
         <pre
           style={{
             padding: 12,
@@ -156,41 +122,19 @@ export default function McpPage() {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
-        <Link
-          href="/"
-          className="btn-primary"
-          style={{ ...primaryButton, display: "inline-block" }}
-        >
+        <Link href="/" className="btn-primary" style={{ display: "inline-block" }}>
           → build a report from your table
         </Link>
-        <Link
-          href="/arcana"
-          className="btn-secondary"
-          style={{ ...secondaryButton, display: "inline-block" }}
-        >
+        <Link href="/arcana" className="btn-secondary" style={{ display: "inline-block" }}>
           browse /arcana
         </Link>
       </div>
 
-      <div
-        style={{
-          marginTop: 30,
-          paddingTop: 12,
-          borderTop: `1px solid ${C.border08}`,
-          fontFamily: MONO,
-          fontSize: 10.5,
-          color: C.faint,
-          lineHeight: 1.6,
-          maxWidth: 760,
-        }}
-      >
-        <span style={{ marginRight: 9 }}>1</span>
-        create_report returns two links. The permalink carries the whole snapshot in its fragment,
-        which browsers never send to a server (RFC 3986 §3.5), so it stays in the browser and never
-        expires. It runs about 1200 characters, and a truncated one renders an error state rather
-        than a partial report. The short link is 45 characters and resolves for 30 days, which means
-        robovac stores that snapshot for 30 days.
-      </div>
+      <Footnotes
+        notes={[
+          "create_report returns two links. The permalink carries the whole snapshot in its fragment, which browsers never send to a server (RFC 3986 §3.5), so it stays in the browser and never expires. It runs about 1200 characters, and a truncated one renders an error state rather than a partial report. The short link is 45 characters and resolves for 30 days, which means robovac stores that snapshot for 30 days.",
+        ]}
+      />
     </div>
   );
 }

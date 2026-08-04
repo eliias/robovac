@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { Footnotes, PanelHead, SectionHead, StatGrid, type StatCell } from "@/components/kit";
 import { TermLink } from "@/components/TermLink";
-import { C, MONO, SANS, panel, primaryButton, secondaryButton } from "@/components/ui";
+import { C, MONO, SANS, panel } from "@/components/ui";
 import { selectContents, useClipboard } from "@/components/useClipboard";
 import { useViewport } from "@/components/useViewport";
 import { encodeReport } from "@/lib/core/codec";
@@ -68,29 +69,28 @@ const LEARN_SLUGS = [
   "multixact",
 ];
 
-const specCells: { label: string; value: string; sub?: string }[] = [
-  { label: "READS", value: "1 table", sub: " · statistics only" },
-  { label: "TUNES", value: `${SETTINGS.length} settings`, sub: " · trigger, cost, freeze" },
-  { label: "EXPLAINS", value: `${TERMS.length} terms`, sub: " · with live demos" },
+const sub = (text: string) => <span style={{ color: C.faint, fontSize: 11 }}>{text}</span>;
+
+const specCells: StatCell[] = [
+  { label: "READS", value: <>1 table{sub(" · statistics only")}</> },
+  {
+    label: "TUNES",
+    value: (
+      <>
+        {SETTINGS.length} settings{sub(" · trigger, cost, freeze")}
+      </>
+    ),
+  },
+  {
+    label: "EXPLAINS",
+    value: (
+      <>
+        {TERMS.length} terms{sub(" · with live demos")}
+      </>
+    ),
+  },
   { label: "STORES", value: "nothing" },
 ];
-
-function SectionTitle({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        padding: "9px 12px",
-        borderBottom: `1px solid ${C.border08}`,
-        fontFamily: MONO,
-        fontSize: 11,
-        color: C.strong,
-        letterSpacing: "0.03em",
-      }}
-    >
-      {text}
-    </div>
-  );
-}
 
 export function HomeView() {
   const { narrow, mobile } = useViewport();
@@ -226,30 +226,7 @@ export function HomeView() {
             bring the numbers.
           </p>
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 1,
-            background: C.border08,
-            border: `1px solid ${C.border08}`,
-            alignSelf: "start",
-          }}
-        >
-          {specCells.map((cell) => (
-            <div key={cell.label} style={{ background: C.cell, padding: "12px 14px" }}>
-              <div
-                style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.03em" }}
-              >
-                {cell.label}
-              </div>
-              <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.strong, marginTop: 3 }}>
-                {cell.value}
-                {cell.sub && <span style={{ color: C.faint, fontSize: 11 }}>{cell.sub}</span>}
-              </div>
-            </div>
-          ))}
-        </div>
+        <StatGrid cells={specCells} columns={1} style={{ alignSelf: "start" }} />
       </div>
 
       {/* Band B: start here + findings */}
@@ -263,66 +240,30 @@ export function HomeView() {
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              gap: 12,
-              borderBottom: `1px solid ${C.borderStrong}`,
-              paddingBottom: 7,
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontFamily: MONO,
-                fontSize: 12,
-                fontWeight: 600,
-                letterSpacing: "0.06em",
-                color: "#fff",
-              }}
-            >
-              START HERE
-            </h2>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint }}>
-              run it, paste it, read it
-            </span>
-          </div>
+          <SectionHead caption="run it, paste it, read it">START HERE</SectionHead>
 
           <div style={{ ...panel, marginTop: 14 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "9px 12px",
-                borderBottom: `1px solid ${C.border08}`,
-              }}
-            >
-              <span
-                style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}
-              >
-                01 — RUN THIS, ANYWHERE YOU HAVE psql
-              </span>
-              <button
-                className="copy-btn"
-                onClick={copyQuery}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  color: C.muted,
-                  background: "transparent",
-                  border: `1px solid ${C.borderStrong}`,
-                  borderRadius: 3,
-                  padding: mobile ? "8px 12px" : "3px 8px",
-                  cursor: "pointer",
-                }}
-              >
-                {canCopy ? (queryCopied ? "copied" : "copy") : "select all"}
-              </button>
-            </div>
+            <PanelHead
+              title="01 — RUN THIS, ANYWHERE YOU HAVE psql"
+              caption={
+                <button
+                  className="copy-btn"
+                  onClick={copyQuery}
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10.5,
+                    color: C.muted,
+                    background: "transparent",
+                    border: `1px solid ${C.borderStrong}`,
+                    borderRadius: 3,
+                    padding: mobile ? "8px 12px" : "3px 8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {canCopy ? (queryCopied ? "copied" : "copy") : "select all"}
+                </button>
+              }
+            />
             <pre
               ref={queryRef}
               style={{
@@ -363,7 +304,7 @@ export function HomeView() {
               ...(feedbackWarn ? { border: "1px solid oklch(0.70 0.10 62 / 0.32)" } : {}),
             }}
           >
-            <SectionTitle text="02 — PASTE THE OUTPUT" />
+            <PanelHead title="02 — PASTE THE OUTPUT" />
             <textarea
               value={paste}
               onChange={(e) => {
@@ -398,7 +339,7 @@ export function HomeView() {
               <button
                 className="btn-primary"
                 onClick={build}
-                style={{ ...primaryButton, minHeight: mobile ? 44 : undefined }}
+                style={{ minHeight: mobile ? 44 : undefined }}
               >
                 → build the report
               </button>
@@ -496,7 +437,7 @@ export function HomeView() {
           </div>
 
           <div style={{ ...panel, marginTop: 12 }}>
-            <SectionTitle text="03 — OR LET YOUR AGENT DO IT" />
+            <PanelHead title="03 — OR LET YOUR AGENT DO IT" />
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
               <p
                 style={{
@@ -514,11 +455,7 @@ export function HomeView() {
                 <Link
                   href="/mcp"
                   className="btn-secondary"
-                  style={{
-                    ...secondaryButton,
-                    display: "inline-block",
-                    minHeight: mobile ? 44 : undefined,
-                  }}
+                  style={{ display: "inline-block", minHeight: mobile ? 44 : undefined }}
                 >
                   how to add the MCP →
                 </Link>
@@ -529,7 +466,7 @@ export function HomeView() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={panel}>
-            <SectionTitle text="WHAT THE REPORT TELLS YOU" />
+            <PanelHead title="WHAT THE REPORT TELLS YOU" />
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 13 }}>
               {FINDINGS.map((f, i) => (
                 <div
@@ -554,33 +491,14 @@ export function HomeView() {
           </div>
 
           <div style={panel}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 10,
-                padding: "9px 12px",
-                borderBottom: `1px solid ${C.border08}`,
-              }}
-            >
-              <span
-                style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}
-              >
-                IF YOU ARE JUST HERE TO LEARN
-              </span>
-              <Link
-                href="/arcana"
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  color: C.faint,
-                  borderBottom: "1px dotted #2e2e35",
-                }}
-              >
-                all {TERMS.length} ↗
-              </Link>
-            </div>
+            <PanelHead
+              title="IF YOU ARE JUST HERE TO LEARN"
+              caption={
+                <Link href="/arcana" style={{ borderBottom: "1px dotted #2e2e35" }}>
+                  all {TERMS.length} ↗
+                </Link>
+              }
+            />
             <div style={{ padding: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
               {LEARN_SLUGS.map((slug) => {
                 const term = TERMS.find((t) => t.slug === slug);
@@ -608,38 +526,12 @@ export function HomeView() {
         </div>
       </div>
 
-      {/* Footnotes */}
-      <div
-        style={{
-          marginTop: 40,
-          paddingTop: 14,
-          borderTop: `1px solid ${C.border08}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          maxWidth: 840,
-        }}
-      >
-        {[
+      <Footnotes
+        notes={[
           "robovac has no database driver. The query is yours to run and the output is yours to paste. The report you build here is computed in your browser and stored nowhere: its URL carries the whole snapshot in the fragment. Through the MCP server it works differently. create_report also stores the report for 30 days and returns a short link to it, next to that same permalink.",
           "Proposals are arithmetic, not advice: trigger thresholds from your row counts, vacuum duration from the cost model, freeze margins from your xid rate. Every figure on the report shows the formula behind it in a footnote, and every setting page shows the same formula with a slider attached.",
-        ].map((text, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontFamily: MONO,
-              fontSize: 10.5,
-              color: C.faint,
-              lineHeight: 1.6,
-            }}
-          >
-            <span>{i + 1}</span>
-            <span>{text}</span>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
     </div>
   );
 }

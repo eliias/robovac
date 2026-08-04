@@ -1,6 +1,7 @@
 "use client";
 
-import { C, MONO, panel, panelHeader } from "@/components/ui";
+import { PanelHead } from "@/components/kit";
+import { C, MONO, panel } from "@/components/ui";
 import { fmtCompact, fmtDur, fmtInt, fmtPeriod, fmtSecs } from "@/lib/core/format";
 import {
   WRAP,
@@ -13,28 +14,16 @@ import {
   triggerRows,
 } from "@/lib/core/model";
 import type { Values } from "@/lib/core/settings";
-import { hasMeasuredRate, rateState, type Snapshot } from "@/lib/core/snapshot";
+import { reading } from "@/lib/core/reading";
+import { hasMeasuredRate, type Snapshot } from "@/lib/core/snapshot";
 import { UnavailableBody } from "./states";
 
 const DANGER_START = 1600000000;
 
 /** The reason the xid rate is unknown, or null when it is measured. */
 function xidRateUnknown(snap: Snapshot): string | null {
-  const rs = rateState(snap);
-  if (rs === "reset") return "counters reset";
-  if (rs === "single") return "needs 2 samples";
-  return null;
-}
-
-function FrameTitle({ title, caption }: { title: string; caption: React.ReactNode }) {
-  return (
-    <div style={panelHeader}>
-      <span style={{ fontFamily: MONO, fontSize: 11, color: C.strong, letterSpacing: "0.03em" }}>
-        {title}
-      </span>
-      <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>{caption}</span>
-    </div>
-  );
+  const read = reading(snap);
+  return read.xidRateUnknown ? read.rateUnknownReason : null;
 }
 
 function TwoCellStrip({ cells }: { cells: { label: string; value: string; color?: string }[] }) {
@@ -72,12 +61,10 @@ export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values
   const DAYS = 60;
   // D1/D3: without a rate there is no sawtooth. The frame and its figure
   // number stay so the reader learns the figure exists and why it is empty.
-  const rs = rateState(snap);
-  const unavailable = rs === "reset" || (rs === "single" && snap.deadPerDay === 0);
-  if (unavailable) {
+  if (reading(snap).deadRateUnknown) {
     return (
       <div style={panel}>
-        <FrameTitle
+        <PanelHead
           title="FIG. 1 — DEAD TUPLES, 60 d"
           caption={<span style={{ color: C.ghost }}>unavailable</span>}
         />
@@ -91,7 +78,7 @@ export function FigDeadTuples({ snap, values }: { snap: Snapshot; values: Values
   }
   return (
     <div style={panel}>
-      <FrameTitle title="FIG. 1 — DEAD TUPLES, 60 d" caption="sawtooth = vacuum fires" />
+      <PanelHead title="FIG. 1 — DEAD TUPLES, 60 d" caption="sawtooth = vacuum fires" />
       <div style={{ padding: "12px 12px 8px" }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -210,7 +197,7 @@ export function FigFreezeHorizon({ snap, values }: { snap: Snapshot; values: Val
 
   return (
     <div style={panel}>
-      <FrameTitle title="FIG. 2 — FREEZE HORIZON" caption="xid age, 0 → 2^31" />
+      <PanelHead title="FIG. 2 — FREEZE HORIZON" caption="xid age, 0 → 2^31" />
       <div style={{ padding: "16px 12px 10px" }}>
         <svg
           viewBox={`0 0 ${W} 74`}
@@ -316,7 +303,7 @@ export function FigIoCost({ snap, values }: { snap: Snapshot; values: Values }) 
   const maxSec = Math.max(cur.seconds, live.seconds);
   return (
     <div style={panel}>
-      <FrameTitle
+      <PanelHead
         title="FIG. 3 — I/O COST PER RUN"
         caption={
           <>

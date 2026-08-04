@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { C, MONO, SANS, secondaryButton } from "@/components/ui";
+import { C, MONO, SANS } from "@/components/ui";
 import { TERMS, suggestTerms } from "@/lib/terms";
 
 // N1: a wrong term is a search, not a dead end. The middleware passes the
@@ -63,11 +63,7 @@ export default async function TermNotFound() {
           ))}
         </div>
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 16 }}>
-          <Link
-            href="/arcana"
-            className="btn-secondary"
-            style={{ ...secondaryButton, display: "inline-block", textDecoration: "none" }}
-          >
+          <Link href="/arcana" className="btn-secondary" style={{ display: "inline-block" }}>
             browse all {TERMS.filter((t) => t.built).length} →
           </Link>
         </div>

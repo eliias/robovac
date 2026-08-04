@@ -1,6 +1,6 @@
 "use client";
 
-import { C, MONO, primaryButton, secondaryButton } from "@/components/ui";
+import { C, MONO } from "@/components/ui";
 import { fmtCadence } from "@/lib/core/format";
 
 /**
@@ -57,17 +57,13 @@ export function ActionBar({
         <div style={{ color: pending > 0 ? C.warn : C.dim }}>{pending} proposed pending</div>
         <div>vacuum {fmtCadence(periodDays, zeroCadence)}</div>
       </div>
-      <button
-        className="btn-secondary"
-        onClick={onCopy}
-        style={{ ...secondaryButton, height: 44, padding: "0 14px" }}
-      >
+      <button className="btn-secondary" onClick={onCopy} style={{ height: 44, padding: "0 14px" }}>
         {canCopy ? (copied ? "copied" : "copy SQL") : "select SQL"}
       </button>
       <button
         className="btn-primary"
         onClick={onOptimize}
-        style={{ ...primaryButton, height: 44, padding: "0 16px" }}
+        style={{ height: 44, padding: "0 16px" }}
       >
         {pending === 0 ? "✓ optimized" : "→ optimize"}
       </button>

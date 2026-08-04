@@ -35,6 +35,35 @@ button {
   font: inherit;
 }
 
+/* The two buttons live here whole: base and hover in one place, so a button
+   is a class and never a class plus a spread style object. A call site still
+   overrides single properties inline (height, flex), which is why the hover
+   declarations keep !important. */
+.btn-primary {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #08080a;
+  background: #ededf0;
+  border: none;
+  border-radius: 4px;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-secondary {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  color: #b8b8bd;
+  background: #101013;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
 /* Hover states over inline base styles (the prototype used a runtime style-hover). */
 .term-link:hover {
   color: #ffffff !important;

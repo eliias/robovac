@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
+import { Footnotes, Lede, PageHeader } from "@/components/kit";
+import { C, MONO, SANS } from "@/components/ui";
 import { encodeReport } from "@/lib/core/codec";
 import { demoScenarios } from "@/lib/core/demo-scenarios";
 import { fmtCompact } from "@/lib/core/format";
@@ -27,46 +28,17 @@ export default function DemoPage() {
   const scenarios = demoScenarios(Date.now());
   return (
     <div className="page-pad" style={{ maxWidth: 1080, margin: "0 auto" }}>
-      <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/demo</div>
-      <h1
-        className="page-h1"
-        style={{
-          fontFamily: MONO,
-          fontWeight: 500,
-          letterSpacing: "-0.01em",
-          color: "#fff",
-          margin: "6px 0 0",
-        }}
-      >
-        Five tables
-      </h1>
-      <p
-        style={{
-          maxWidth: 700,
-          fontFamily: SANS,
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: C.muted,
-          margin: "16px 0 0",
-        }}
-      >
-        Each one is a real report built from a real snapshot payload: the same route, the same
-        formulas, the same sliders you would get from your own table. They are here because vacuum
-        problems come in a small number of shapes, and reading five of them is faster than reading
-        the documentation.
-      </p>
-      <p
-        style={{
-          maxWidth: 700,
-          fontFamily: SANS,
-          fontSize: 15,
-          lineHeight: 1.65,
-          color: C.dim,
-          margin: "12px 0 0",
-        }}
-      >
-        Two of the five cannot be fixed by any setting on the page. That is deliberate.
-      </p>
+      <PageHeader path="/demo" title="Five tables">
+        <Lede>
+          Each one is a real report built from a real snapshot payload: the same route, the same
+          formulas, the same sliders you would get from your own table. They are here because vacuum
+          problems come in a small number of shapes, and reading five of them is faster than reading
+          the documentation.
+        </Lede>
+        <Lede dim>
+          Two of the five cannot be fixed by any setting on the page. That is deliberate.
+        </Lede>
+      </PageHeader>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 26 }}>
         {scenarios.map((s) => (
@@ -176,53 +148,20 @@ export default function DemoPage() {
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
-        <Link
-          href="/"
-          className="btn-primary"
-          style={{ ...primaryButton, display: "inline-block" }}
-        >
+        <Link href="/" className="btn-primary" style={{ display: "inline-block" }}>
           → build one from your own table
         </Link>
-        <Link
-          href="/arcana"
-          className="btn-secondary"
-          style={{ ...secondaryButton, display: "inline-block" }}
-        >
+        <Link href="/arcana" className="btn-secondary" style={{ display: "inline-block" }}>
           browse the terms
         </Link>
       </div>
 
-      <div
-        style={{
-          marginTop: 34,
-          paddingTop: 14,
-          borderTop: `1px solid ${C.border08}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          maxWidth: 840,
-        }}
-      >
-        {[
+      <Footnotes
+        notes={[
           "Each card holds a snapshot payload of the kind the query produces, and opening one loads the ordinary report route. Anything that renders wrong here renders wrong for a real table.",
           "Table and database names are invented; the statistics are shaped after production tables of that kind. Nobody's data is in here, which is also why the numbers are round enough to check by hand.",
-        ].map((text, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontFamily: MONO,
-              fontSize: 10.5,
-              color: C.faint,
-              lineHeight: 1.6,
-            }}
-          >
-            <span>{i + 1}</span>
-            <span>{text}</span>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
     </div>
   );
 }

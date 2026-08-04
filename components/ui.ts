@@ -41,28 +41,9 @@ export const panelHeader: CSSProperties = {
   borderBottom: `1px solid ${C.border08}`,
 };
 
-export const primaryButton: CSSProperties = {
-  fontFamily: MONO,
-  fontSize: 12.5,
-  color: C.bg,
-  background: "#ededf0",
-  border: "none",
-  borderRadius: 4,
-  padding: "9px 12px",
-  cursor: "pointer",
-  fontWeight: 500,
-};
-
-export const secondaryButton: CSSProperties = {
-  fontFamily: MONO,
-  fontSize: 12,
-  color: C.muted,
-  background: C.control,
-  border: "1px solid rgba(255,255,255,0.11)",
-  borderRadius: 4,
-  padding: "8px 10px",
-  cursor: "pointer",
-};
+// The buttons are .btn-primary and .btn-secondary in globals.css. They are
+// not style objects: a button that carried both fought itself, and the hover
+// rules needed !important to win against their own base.
 
 export const termLinkStyle: CSSProperties = {
   fontFamily: MONO,

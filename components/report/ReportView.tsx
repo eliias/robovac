@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Footnotes, SectionHead, StatGrid, type StatCell } from "@/components/kit";
 import { ActionBar } from "@/components/report/ActionBar";
 import { TermLink } from "@/components/TermLink";
 import { useViewport } from "@/components/useViewport";
-import { C, MONO, SANS, primaryButton, secondaryButton } from "@/components/ui";
+import { C, MONO, SANS } from "@/components/ui";
 import { CodecError, decodeReport, encodeReport, type ReportPayload } from "@/lib/core/codec";
 import { fmtCadence, fmtCompact, fmtDur, fmtInt, fmtSecs, fmtVal } from "@/lib/core/format";
 import { passPages, runCost, threshold, triggerRows } from "@/lib/core/model";
 import { optimize } from "@/lib/core/optimize";
+import { reading } from "@/lib/core/reading";
 import { SETTINGS, settingsByGroup, type Group, type Values } from "@/lib/core/settings";
-import { hasMeasuredRate, isSmallTable, rateState, type Snapshot } from "@/lib/core/snapshot";
-import { NoticeBar, UnknownValue } from "./states";
+import type { Snapshot } from "@/lib/core/snapshot";
+import { Notices, snapshotLabel } from "./Notices";
+import { UnknownValue } from "./states";
 import { useClipboard, selectContents } from "@/components/useClipboard";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
@@ -51,11 +54,6 @@ function agoLabel(snap: Snapshot): string {
   const min = Math.floor(ms / 60000);
   if (min > 0) return `${min} min ago`;
   return `${Math.max(1, Math.round(ms / 1000))} s ago`;
-}
-
-function snapshotLabel(snap: Snapshot): string {
-  const t = new Date(snap.capturedAt);
-  return t.toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
 export function ReportView({
@@ -151,19 +149,13 @@ export function ReportView({
   if (!payload || !values || !derived) return null;
 
   const { snap, thrCur, periodCur, periodLive, costCur, costLive, aggressiveNow } = derived;
-  // Zero rate has two causes with different copy: a real interval without
-  // writes (measured zero), or a single statistics read (no rate at all).
-  const measured = hasMeasuredRate(snap);
-  const zeroCadence = measured ? "never · no writes observed" : "every unknown · one sample";
-
-  // The degraded states (D1-D6). A missing input degrades the report, it
-  // does not replace it: unknown figures read as a dash with the reason,
-  // never as a zero a DBA would believe.
-  const rState = rateState(snap);
-  const ratesUnknown = rState === "reset" || (rState === "single" && snap.deadPerDay === 0);
-  const estimated = rState === "noisy";
-  const unknownReason = rState === "reset" ? "counters reset" : "needs 2 samples";
-  const small = isSmallTable(snap);
+  // The degraded states (D1-D6), decided once. A missing input degrades the
+  // report, it does not replace it: unknown figures read as a dash with the
+  // reason, never as a zero a DBA would believe.
+  const read = reading(snap);
+  const { measured, zeroCadence, estimated, optimizeDisabled } = read;
+  const ratesUnknown = read.deadRateUnknown;
+  const unknownReason = read.rateUnknownReason ?? "";
   // On insert-heavy tables the insert trigger fires long before the
   // dead-side one; the header cadence uses whichever comes first.
   const insPeriod = ratesUnknown ? null : insertPeriodDays(snap);
@@ -178,14 +170,6 @@ export function ReportView({
   const proposedCadence =
     sliderCadence && currentCadence && sliderCadence.days !== currentCadence.days
       ? sliderCadence
-      : null;
-  const ageDays = (Date.now() - Date.parse(snap.capturedAt)) / 86400000;
-  const stale = ageDays > 7;
-  const neverVacuumed = !snap.lastAutovacuum && !snap.lastVacuum;
-  const optimizeDisabled = estimated
-    ? `rates from a ${fmtSecs(snap.sampleSeconds ?? 0)} interval are noise, not a basis for proposals`
-    : small
-      ? "no changes recommended for a table this size"
       : null;
   const gridCols = narrow ? "minmax(0,1fr)" : "minmax(0,1fr) 520px";
   const bandGap = mobile ? 24 : 48;
@@ -209,7 +193,7 @@ export function ReportView({
     return `freeze_max_age ${fmtCompact(values.autovacuum_freeze_max_age)}`;
   };
 
-  const statCells: { label: string; value: React.ReactNode; color?: string }[] = [
+  const statCells: StatCell[] = [
     { label: "DATABASE", value: snap.db },
     {
       label: "HEAP SIZE",
@@ -291,102 +275,7 @@ export function ReportView({
         </div>
       )}
 
-      {expiresInDays !== undefined && (
-        <div style={{ paddingTop: 16 }}>
-          <NoticeBar
-            severity="neutral"
-            title="short link"
-            body={`This link stops working in ${expiresInDays} ${
-              expiresInDays === 1 ? "day" : "days"
-            }. The permalink in the MCP result has no expiry. Keep that one if you file this somewhere.`}
-          />
-        </div>
-      )}
-
-      {/* Degraded-state notices (D1-D6): the report renders below them. */}
-      {(ratesUnknown || estimated || stale || small || neverVacuumed) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 16 }}>
-          {rState === "reset" && snap.countersReset && (
-            <NoticeBar
-              severity="neutral"
-              title="Counters went backwards. Rates unknown."
-              body={
-                <>
-                  <span style={{ fontFamily: MONO, color: C.strong }}>
-                    {snap.countersReset.counter}
-                  </span>{" "}
-                  fell from {fmtInt(snap.countersReset.first)} to{" "}
-                  {fmtInt(snap.countersReset.second)} between the two samples, so pg_stat_reset()
-                  ran, the server restarted, or the two samples came from different servers.
-                  Everything not derived from a rate is still exact.
-                </>
-              }
-              action={{ label: "take two fresh samples", href: "/" }}
-            />
-          )}
-          {rState === "single" && ratesUnknown && (
-            <NoticeBar
-              severity="neutral"
-              title="One sample. Rates unknown."
-              body="Dead-tuple rate, xid consumption rate, and everything derived from them (days to the next vacuum, days to the freeze limit, shutdown margin) need two readings. Thresholds, sizes, current settings and the proposed values below are computed from this one."
-              action={{ label: "add a second sample", href: "/" }}
-            />
-          )}
-          {estimated && (
-            <NoticeBar
-              severity="neutral"
-              title={`${fmtSecs(snap.sampleSeconds ?? 0)} between samples. Rates are noise.`}
-              body="At this interval a single checkpoint or one background job dominates the delta. Run the query again 30-60 s apart; the rates shown until then are marked estimated and are not used for the proposals."
-              action={{ label: "re-run the query", href: "/" }}
-            />
-          )}
-          {stale && (
-            <NoticeBar
-              severity="neutral"
-              title={`Snapshot is ${Math.floor(ageDays)} days old.`}
-              body={
-                <>
-                  Figures below describe the table as of {snapshotLabel(snap)}.
-                  {!ratesUnknown && !estimated && (
-                    <>
-                      {" "}
-                      At the write rate it recorded, xid age has since advanced by roughly{" "}
-                      {fmtCompact(Math.round(ageDays * snap.xidPerDay))}
-                      {snap.xidAge + ageDays * snap.xidPerDay >
-                        snap.proposed.autovacuum_freeze_max_age &&
-                        ", past the freeze limit this report proposes"}
-                      .
-                    </>
-                  )}
-                </>
-              }
-              action={{ label: "re-run the query", href: "/" }}
-            />
-          )}
-          {small && (
-            <NoticeBar
-              severity="neutral"
-              title={`${fmtInt(snap.live)} live rows. The defaults are correct here.`}
-              body="At this size autovacuum fires on the 50-row floor long before any scale factor matters, and a full pass costs under a second. Nothing on this table is worth changing. The sliders and charts below are live if you want to see why."
-              action={{ label: "snapshot another table", href: "/" }}
-            />
-          )}
-          {neverVacuumed &&
-            (snap.autovacuumOff ? (
-              <NoticeBar
-                severity="neutral"
-                title="Autovacuum is off for this table."
-                body="reloptions carry autovacuum_enabled = false. That is the answer, not a hint: nothing below runs until it is enabled again."
-              />
-            ) : (
-              <NoticeBar
-                severity="neutral"
-                title="Autovacuum has never run on this table."
-                body="Either the table has not yet reached its trigger threshold, autovacuum is off for it in reloptions, or statistics were reset since the last run. The first is expected on a young table; the second is shown in the trigger group below."
-              />
-            ))}
-        </div>
-      )}
+      <Notices snap={snap} read={read} expiresInDays={expiresInDays} />
 
       {/* Band A: header */}
       <div
@@ -459,7 +348,7 @@ export function ReportView({
                 color: "#ededf0",
               }}
             >
-              {rState === "reset" && snap.countersReset ? (
+              {read.state === "reset" && snap.countersReset ? (
                 <>
                   {num(snap.countersReset.counter)} fell between the two samples, so rates are
                   unknown. The trigger sits at {num(fmtCompact(thrCur))} dead tuples
@@ -533,35 +422,7 @@ export function ReportView({
             </div>
           )}
         </div>
-        <div
-          style={{
-            display: "grid",
-            gap: 1,
-            background: C.border08,
-            border: `1px solid ${C.border08}`,
-            gridTemplateColumns: narrow ? "repeat(2,1fr)" : "repeat(3,1fr)",
-          }}
-        >
-          {statCells.map((cell) => (
-            <div key={cell.label} style={{ background: C.cell, padding: "10px 12px" }}>
-              <div
-                style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.03em" }}
-              >
-                {cell.label}
-              </div>
-              <div
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 13.5,
-                  color: cell.color ?? C.strong,
-                  marginTop: 3,
-                }}
-              >
-                {cell.value}
-              </div>
-            </div>
-          ))}
-        </div>
+        <StatGrid cells={statCells} columns={narrow ? 2 : 3} />
       </div>
 
       {/* Band B: reading + actions */}
@@ -584,7 +445,7 @@ export function ReportView({
             color: C.muted,
           }}
         >
-          {rState === "reset" ? (
+          {read.state === "reset" ? (
             <>
               No rate survives a counter reset. Run the query twice, 30-60 s apart, and the rates,
               cadences, and proposals sharpen.
@@ -671,7 +532,6 @@ export function ReportView({
             onClick={() => setAll({ ...snap.proposed })}
             disabled={Boolean(optimizeDisabled)}
             style={{
-              ...primaryButton,
               textAlign: "left",
               ...(optimizeDisabled
                 ? { background: C.control, color: C.faint, cursor: "default" }
@@ -693,7 +553,7 @@ export function ReportView({
             <button
               className="btn-secondary"
               onClick={() => setAll({ ...snap.current })}
-              style={{ ...secondaryButton, flex: 1 }}
+              style={{ flex: 1 }}
             >
               reset to current
             </button>
@@ -704,7 +564,7 @@ export function ReportView({
                 for (const d of SETTINGS) v[d.key] = d.def;
                 setAll(v);
               }}
-              style={{ ...secondaryButton, flex: 1 }}
+              style={{ flex: 1 }}
             >
               reset to pg defaults
             </button>
@@ -727,49 +587,20 @@ export function ReportView({
             const defs = settingsByGroup(g.id);
             return (
               <div key={g.id}>
-                <div
-                  className="group-header"
+                <SectionHead
+                  caption={groupSummary(g.id)}
                   onClick={() => setOpen((o) => ({ ...o, [g.id]: !o[g.id] }))}
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    borderBottom: `1px solid ${C.borderStrong}`,
-                    paddingBottom: 7,
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
                 >
-                  <h2
-                    style={{
-                      margin: 0,
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: 8,
-                      fontFamily: MONO,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      letterSpacing: "0.06em",
-                      color: "#fff",
-                    }}
-                  >
-                    <span style={{ display: "inline-block", width: 9, color: C.dim }}>
-                      {open[g.id] ? "−" : "+"}
-                    </span>
-                    {g.title}
-                    <span
-                      style={{ fontWeight: 400, letterSpacing: 0, color: C.ghost, fontSize: 10.5 }}
-                    >
-                      {defs.length} settings
-                    </span>
-                  </h2>
-                  <span
-                    style={{ fontFamily: MONO, fontSize: 10.5, color: C.faint, textAlign: "right" }}
-                  >
-                    {groupSummary(g.id)}
+                  <span style={{ display: "inline-block", width: 9, color: C.dim }}>
+                    {open[g.id] ? "−" : "+"}
                   </span>
-                </div>
+                  {g.title}
+                  <span
+                    style={{ fontWeight: 400, letterSpacing: 0, color: C.ghost, fontSize: 10.5 }}
+                  >
+                    {defs.length} settings
+                  </span>
+                </SectionHead>
                 {open[g.id] &&
                   defs.map((d) => (
                     <Slider
@@ -855,19 +686,8 @@ export function ReportView({
         </div>
       </div>
 
-      {/* Footnotes */}
-      <div
-        style={{
-          marginTop: 44,
-          paddingTop: 14,
-          borderTop: `1px solid ${C.border08}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          maxWidth: 840,
-        }}
-      >
-        {[
+      <Footnotes
+        notes={[
           snap.deadPerDay > 0
             ? `Dead rate derived from two statistics reads: Δ(n_tup_upd − n_tup_hot_upd + n_tup_del) / Δt. HOT updates excluded; they are reclaimed on the page without a vacuum pass.`
             : measured
@@ -876,23 +696,8 @@ export function ReportView({
           `Duration model: cost = work pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Work pages = heap pages not marked all-visible${snap.allVisiblePages === undefined ? " (relallvisible not in this snapshot, full heap priced)" : ""}${snap.indexes ? `, plus 30% of the heap for each of the ${snap.indexes} indexes` : ""}. The page mix and the 30% are fixed assumptions, not measurements. Real runs vary with shared_buffers pressure.`,
           "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
           "Snapshot is a point-in-time read. A report built in the browser is stored nowhere: its URL carries the whole thing. A report that came from create_report also sits in robovac's store for 30 days, which is what a /r/ link resolves. Nothing here has been applied to your database.",
-        ].map((text, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontFamily: MONO,
-              fontSize: 10.5,
-              color: C.faint,
-              lineHeight: 1.6,
-            }}
-          >
-            <span>{i + 1}</span>
-            <span>{text}</span>
-          </div>
-        ))}
-      </div>
+        ]}
+      />
 
       {mobile && (
         <ActionBar
