@@ -2,7 +2,7 @@ import { requestOrigin } from "@/lib/origin";
 import { TERMS } from "@/lib/terms";
 
 // The indexable surface: the five public pages and the built explain pages.
-// The report route is deliberately absent (noindex, fragment-only payload).
+// The report routes are deliberately absent (noindex, private payloads).
 export async function GET() {
   const origin = await requestOrigin();
   const paths = [

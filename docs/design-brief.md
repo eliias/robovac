@@ -10,7 +10,7 @@ One report page carries the product. It explains the vacuum state of one table, 
 
 Postgres removes dead rows with a process called vacuum. The settings that control it are cryptic, and most teams run bad defaults until a table falls over. robovac takes a statistics snapshot of one table and shows three things: what the current settings do, what values fit this workload, and what changes when you move them.
 
-An agent creates a link through our MCP server. The link contains all data (URL fragment, no server state). The person opens the link and sees the report. No login, no account, no saved state. The URL is the product.
+An agent creates a link through our MCP server. The short form is an id that resolves for 30 days. The permalink form contains all data in the URL fragment and never expires. The person opens either one and sees the report. No login, no account. The URL is the product.
 
 ## Audience
 
