@@ -7,8 +7,8 @@ description = "Start the next dev server"
 run = "pnpm run dev"
 
 [tasks.build]
-description = "Build the app and the mcp package"
-run = ["pnpm run build", "pnpm --filter robovac-mcp run build"]
+description = "Build the app"
+run = "pnpm run build"
 
 [tasks.test]
 description = "Run the vitest suite"

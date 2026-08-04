@@ -7,9 +7,12 @@ import type { Hints } from "@/lib/core/snapshot";
 import { findTerm, TERMS, termHref } from "@/lib/terms";
 import { candidatesSql, snapshotSql } from "@/lib/core/queries";
 import { buildSnapshot, verdict } from "@/lib/core/report";
+import { allow, MAX_FRAGMENT_BYTES, MAX_REPORTS_PER_HOUR } from "@/lib/links/rate-limit";
+import type { LinkStore } from "@/lib/links";
 
-// robovac never connects to a database and reads no environment variables.
-// The agent runs the SQL on its own connection and passes the rows back.
+// robovac never connects to your database: the agent runs the SQL on its own
+// connection and passes the rows back. create_report writes two things, both
+// to Redis: the report behind the short link, and the per-IP report counter.
 const DEFAULT_BASE_URL = "https://robovac.hannesmoser.at";
 
 const SNAPSHOT_INSTRUCTIONS =
@@ -41,7 +44,11 @@ const baseUrlInput = z
   .optional()
   .describe(`Base URL of the robovac web app (default ${DEFAULT_BASE_URL})`);
 
-export function registerTools(server: McpServer): void {
+/**
+ * The ip is the caller of this one request. Only create_report uses it: it is
+ * the only tool that writes, so it is the only tool with a limit.
+ */
+export function registerTools(server: McpServer, store: LinkStore, ip: string): void {
   server.tool(
     "get_snapshot_sql",
     "Return the read-only statistics SQL for one table. robovac never connects to a database: your agent runs this query twice on its own connection and passes both rows to create_report.",
@@ -64,7 +71,7 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "create_report",
-    "Build the robovac report from two snapshot rows (the get_snapshot_sql query, run twice). Returns the report URL, a verdict, the workload pattern, warnings, optimized settings, and one reason per changed setting. Optional workload hints sharpen the classification.",
+    "Build the robovac report from two snapshot rows (the get_snapshot_sql query, run twice). Returns two links (a short url that expires in 30 days, and a permalink that never does), a verdict, the workload pattern, warnings, optimized settings, and one reason per changed setting. Optional workload hints sharpen the classification.",
     {
       first: z.record(z.unknown()).describe("Result row of the first get_snapshot_sql run"),
       second: z.record(z.unknown()).describe("Result row of the second run, 30-60 s later"),
@@ -138,14 +145,36 @@ export function registerTools(server: McpServer): void {
       const hints = Object.values(provided).some((v) => v !== undefined) ? provided : undefined;
       const snap = buildSnapshot(first, second, hints);
       const proposal = optimize(snap);
-      const url = `${base_url ?? DEFAULT_BASE_URL}/report#${encodeReport({ snap })}`;
+      const base = base_url ?? DEFAULT_BASE_URL;
+      const fragment = encodeReport({ snap });
+      // A table name is free text, so a hostile row can inflate the payload.
+      if (fragment.length > MAX_FRAGMENT_BYTES) {
+        return json({ error: "snapshot too large to store", bytes: fragment.length });
+      }
+      // After the size check, which costs nothing, and before the write.
+      if (!(await allow(ip))) {
+        return json({
+          error: "report limit reached",
+          limit: `${MAX_REPORTS_PER_HOUR} reports per hour from one address`,
+          retry_after: "the next clock hour",
+          note:
+            "Temporary, and only create_report is capped: get_snapshot_sql, get_candidates_sql " +
+            "and explain_term still answer. Tell the user the cap resets at the top of the hour. " +
+            "Do not retry in a loop.",
+        });
+      }
+      const { id, expiresAt } = await store.put(fragment);
+      const url = `${base}/r/${id}`;
+      const permalink = `${base}/report#${fragment}`;
       const changed = SETTINGS.map((d) => d.key).filter(
         (key) => proposal.values[key] !== snap.current[key],
       );
       return json({
         url,
+        permalink,
+        expires_at: new Date(expiresAt).toISOString(),
         url_note:
-          "Relay this URL by copy, never by re-typing it: one changed character makes the link unusable, and the report page rejects it as damaged.",
+          "Paste url in your reply: it is short and stops working after 30 days. permalink carries the whole report and never expires, so file that one if you store this anywhere. Relay either by copy, never by re-typing: one changed character makes the link unusable, and the report page rejects it as damaged.",
         verdict: verdict(snap),
         pattern: proposal.pattern,
         // The list a reviewer reads first. An empty one is a real answer:

@@ -39,8 +39,8 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   },
   {
     title: "create_report",
-    sig: "(first, second, …hints) → url",
-    body: "Takes the two result rows and returns the report URL, the workload pattern, warnings, and the optimized settings with one reason per change. Optional hints (pattern, replication_lag_budget, storage, fk_heavy, …) sharpen the classification.",
+    sig: "(first, second, …hints) → url + permalink",
+    body: "Takes the two result rows and returns two links (a short url that expires in 30 days, and a permalink that never does), the workload pattern, warnings, and the optimized settings with one reason per change. Optional hints (pattern, replication_lag_budget, storage, fk_heavy, …) sharpen the classification.",
   },
   {
     title: "get_candidates_sql",
@@ -63,7 +63,7 @@ const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
     title: "required grants",
     sig: "pg_monitor",
-    body: "For your agent's own connection: a role in pg_monitor is enough. No table data is read, ever. robovac itself needs nothing: no DATABASE_URL, no env, no connection.",
+    body: "For your agent's own connection: a role in pg_monitor is enough. No table data is read, ever. robovac needs no DATABASE_URL and never opens a database connection of its own. It does store two things: the report behind the short link for 30 days, and one report counter per IP address for the current hour.",
   },
 ];
 
@@ -96,7 +96,9 @@ export default function McpPage() {
         It never connects to your database: it hands your agent a read-only{" "}
         <span style={{ fontFamily: MONO, color: C.strong }}>SELECT</span>, the agent runs it twice
         on its own connection, and robovac computes the report from the two result rows. There is no
-        account, no stored state, no environment variable, and no write path anywhere.
+        account, no <span style={{ fontFamily: MONO, color: C.strong }}>DATABASE_URL</span>, and no
+        write path to your database. robovac stores two things: the report behind the short link for
+        30 days, and one report counter per IP address for the current hour.
         <sup style={{ fontFamily: MONO, fontSize: 9.5, color: C.faint }}>1</sup>
       </p>
 
@@ -183,9 +185,11 @@ export default function McpPage() {
         }}
       >
         <span style={{ marginRight: 9 }}>1</span>
-        Fragments are not sent to the server on navigation (RFC 3986 §3.5), so the snapshot stays in
-        the browser. A link is roughly 900 bytes after compression; a truncated one renders an error
-        state rather than a partial report.
+        create_report returns two links. The permalink carries the whole snapshot in its fragment,
+        which browsers never send to a server (RFC 3986 §3.5), so it stays in the browser and never
+        expires. It runs about 1200 characters, and a truncated one renders an error state rather
+        than a partial report. The short link is 45 characters and resolves for 30 days, which means
+        robovac stores that snapshot for 30 days.
       </div>
     </div>
   );

@@ -165,7 +165,8 @@ function TruncatedState({ error }: { error: CodecError }) {
       )}
       <Footer>
         Ask whoever sent it to copy the link again (the copy button on the report writes the whole
-        thing). Nothing was lost on our side: robovac never had a copy of it.
+        thing). A link only fails this way when its payload travelled in the URL, so what is missing
+        is the tail of the fragment.
       </Footer>
     </div>
   );
@@ -333,6 +334,36 @@ export function ErrorState({ error }: { error: CodecError }) {
         {error.kind === "damaged" && <DamagedState error={error} />}
         {error.kind === "version" && <VersionState error={error} />}
         {error.kind === "invalid" && <InvalidState error={error} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A short link that no longer resolves. An expired id and an id that never
+ * existed are indistinguishable once the entry is gone, so this is one state
+ * and it does not guess which happened.
+ */
+export function ExpiredState() {
+  return (
+    <div className="page-pad" style={{ maxWidth: 980, margin: "0 auto" }}>
+      <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>/r</div>
+      <div style={{ marginTop: 18, maxWidth: 640 }}>
+        <Eyebrow label="LINK EXPIRED" warn />
+        <Title>This short link no longer resolves.</Title>
+        <Body>
+          A short link holds the report for 30 days. This one is past that, or it never existed.
+          robovac cannot tell the two apart, because it keeps no record of what it dropped.
+        </Body>
+        <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginTop: 18 }}>
+          <a className="btn-primary" href="/" style={{ ...primaryButton, textDecoration: "none" }}>
+            → build a fresh report
+          </a>
+        </div>
+        <Footer>
+          Ask whoever sent it for the permalink instead. Every MCP result carries both links, and
+          the permalink form has no expiry.
+        </Footer>
       </div>
     </div>
   );

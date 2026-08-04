@@ -621,7 +621,7 @@ export function HomeView() {
         }}
       >
         {[
-          "robovac has no database driver. The query is yours to run and the output is yours to paste; the report is computed in your browser from what you paste, and the paste never reaches a server.",
+          "robovac has no database driver. The query is yours to run and the output is yours to paste. The report you build here is computed in your browser and stored nowhere: its URL carries the whole snapshot in the fragment. Through the MCP server it works differently. create_report also stores the report for 30 days and returns a short link to it, next to that same permalink.",
           "Proposals are arithmetic, not advice: trigger thresholds from your row counts, vacuum duration from the cost model, freeze margins from your xid rate. Every figure on the report shows the formula behind it in a footnote, and every setting page shows the same formula with a slider attached.",
         ].map((text, i) => (
           <div

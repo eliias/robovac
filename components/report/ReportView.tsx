@@ -58,7 +58,15 @@ function snapshotLabel(snap: Snapshot): string {
   return t.toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
-export function ReportView() {
+export function ReportView({
+  fragment,
+  expiresInDays,
+}: {
+  /** Set by /r/[id]. The hash still wins when there is one. */
+  fragment?: string;
+  /** Set by /r/[id]. Absent on a permalink, which never expires. */
+  expiresInDays?: number;
+} = {}) {
   const [payload, setPayload] = useState<ReportPayload | null>(null);
   const [error, setError] = useState<CodecError | null>(null);
   const [values, setValues] = useState<Values | null>(null);
@@ -77,7 +85,7 @@ export function ReportView() {
     // Never re-collapse on rotate.
     if (window.innerWidth < 720) setOpen({ trigger: true, cost: false, freeze: false });
     try {
-      const p = decodeReport(window.location.hash);
+      const p = decodeReport(window.location.hash || fragment || "");
       setPayload(p);
       const merged: Values = { ...p.snap.current };
       for (const [key, v] of Object.entries(p.tuned ?? {})) {
@@ -87,7 +95,7 @@ export function ReportView() {
     } catch (e) {
       setError(e instanceof CodecError ? e : new CodecError("invalid", [String(e)]));
     }
-  }, []);
+  }, [fragment]);
 
   useEffect(() => {
     if (!payload || !values || !userChanged.current) return;
@@ -280,6 +288,18 @@ export function ReportView() {
           <a href="/" className="term-link" style={{ ...demoLinkStyle, color: C.strong }}>
             build one from your own table →
           </a>
+        </div>
+      )}
+
+      {expiresInDays !== undefined && (
+        <div style={{ paddingTop: 16 }}>
+          <NoticeBar
+            severity="neutral"
+            title="short link"
+            body={`This link stops working in ${expiresInDays} ${
+              expiresInDays === 1 ? "day" : "days"
+            }. The permalink in the MCP result has no expiry. Keep that one if you file this somewhere.`}
+          />
         </div>
       )}
 
@@ -855,7 +875,7 @@ export function ReportView() {
               : `Single sample: no rate can be derived from one statistics read. Every figure that needs a rate says "unknown" instead of assuming one.`,
           `Duration model: cost = work pages × (0.55·page_hit + 0.25·page_miss + 0.20·page_dirty); the worker sleeps cost_delay ms per cost_limit units accumulated. Work pages = heap pages not marked all-visible${snap.allVisiblePages === undefined ? " (relallvisible not in this snapshot, full heap priced)" : ""}${snap.indexes ? `, plus 30% of the heap for each of the ${snap.indexes} indexes` : ""}. The page mix and the 30% are fixed assumptions, not measurements. Real runs vary with shared_buffers pressure.`,
           "Trigger formula: autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor × n_live_tup, and the insert-side equivalent on Postgres 13+. See PostgreSQL 16 docs §25.1.6 “The Autovacuum Daemon”.",
-          "Snapshot is a point-in-time read encoded in this URL. Nothing is stored server-side, and nothing here has been applied to your database.",
+          "Snapshot is a point-in-time read. A report built in the browser is stored nowhere: its URL carries the whole thing. A report that came from create_report also sits in robovac's store for 30 days, which is what a /r/ link resolves. Nothing here has been applied to your database.",
         ].map((text, i) => (
           <div
             key={i}

@@ -24,3 +24,5 @@ mise.local.toml
 
 # os
 .DS_Store
+
+.links-dev.json

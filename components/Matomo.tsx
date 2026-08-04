@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { analyticsUrl } from "@/lib/analytics-url";
 
 const MATOMO_URL = "https://analytics.conc.at";
 const MATOMO_SITE_ID = "15";
@@ -18,14 +19,25 @@ function Tracker() {
   const previousUrl = useRef("");
 
   useEffect(() => {
-    const url = window.location.href;
+    // Never window.location.href: it carries the report fragment and the
+    // short link id. See lib/analytics-url.ts.
+    const url = analyticsUrl(window.location.href);
     // oxlint-disable-next-line no-underscore-dangle -- _paq is Matomo's fixed global name
     const _paq = (window._paq = window._paq ?? []);
     if (previousUrl.current === "") {
       // Cookieless mode: no consent banner needed.
       _paq.push(["disableCookies"]);
+      // Second line of defence, in case a hit ever reaches Matomo without a
+      // custom URL.
+      _paq.push(["discardHashTag", true]);
       _paq.push(["setTrackerUrl", `${MATOMO_URL}/matomo.php`]);
       _paq.push(["setSiteId", MATOMO_SITE_ID]);
+      // Before the first trackPageView, or the first hit reports the raw href.
+      _paq.push(["setCustomUrl", url]);
+      // Without this, Matomo reads document.referrer itself and sends the
+      // /r/<id> path of the tab the reader came from. The referrer is "" on a
+      // direct load, and new URL("") throws, so the guard has to stay.
+      if (document.referrer) _paq.push(["setReferrerUrl", analyticsUrl(document.referrer)]);
       _paq.push(["enableLinkTracking"]);
       _paq.push(["trackPageView"]);
       const script = document.createElement("script");

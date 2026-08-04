@@ -92,11 +92,19 @@ That rule also settles the slider case for free. `ReportView.tsx:98` rewrites th
 
 ### Rate limit
 
-The hosted `/mcp` is the only public write path, so the limit lands there and nowhere else. Redis `INCR rl:<ip>:<hour>` with `EX 3600`, capped at 60 requests per IP per hour. The counter sits at the route, which sees the IP but not which tool a request targets, so it caps every MCP request rather than only the writes. Telling them apart needs a JSON-RPC body parse at the route, which buys little and entangles the route with the protocol.
+300 report writes per IP per clock hour. Redis `INCR rl:<ip>:<hour>` with `EX 3600`, checked inside `create_report` next to the payload cap and before the write. `get_snapshot_sql`, `get_candidates_sql` and `explain_term` write nothing and have no limit at all. That falls out of where the check sits: no counter runs at the route, so a call that stores nothing cannot spend anyone's quota.
 
-The payload cap sits inside `create_report`, which is the code that holds the fragment. Anything over 8 KB is rejected before the write. A normal link is about 900 bytes, and a table name is free text, so a hostile row is the case this catches.
+`mcp-handler` builds the MCP server inside the request handler and runs our callback there, so the route hands the per-request IP to `registerTools` and `create_report` closes over it. No JSON-RPC body parse, and the route stays out of the protocol.
 
-The file store skips both. Development has no attacker.
+Over the cap, `create_report` returns a normal tool result that names the cap, says it resets at the next clock hour, and says the other three tools still answer. An agent that reads it must not see a permanent failure or a reason to retry in a loop.
+
+A Redis error allows the write. The store is unavailable in that case anyway, and a broken counter is no reason to refuse the calls that still work.
+
+The IP is only as trustworthy as the proxy in front of the app: `X-Forwarded-For`, then `X-Real-IP`, then the literal `unknown`. A proxy that sets `X-Forwarded-For $remote_addr` makes it authoritative. Without one, a caller picks its own bucket.
+
+The payload cap also sits inside `create_report`, which is the code that holds the fragment. Anything over 8 KB is rejected before the write, and before the counter, so an oversized call spends no quota. A normal link is about 900 bytes, and a table name is free text, so a hostile row is the case this catches.
+
+Development skips the counter: with no `REDIS_URL` there is nothing to count with, and no attacker. The payload cap runs everywhere.
 
 ### MCP result
 
@@ -132,7 +140,7 @@ The no-server-state promise is load-bearing in nine places. Every one is now fal
 | `docs/design-brief.md:13`              | "The link contains all data (URL fragment, no server state)"           |
 | `docs/seo.md:11,20`                    | the whole fragment argument, and option (b) which this supersedes      |
 
-What stays true and stays written: robovac has no database driver, never runs your SQL, and reads no `DATABASE_URL`. Only the storage claim changes. The new line is that a short link stores the report for 30 days and the permalink stores nothing.
+What stays true and stays written: robovac has no database driver, never runs your SQL, and reads no `DATABASE_URL`. Only the storage claim changes. The new line is that `create_report` stores the report for 30 days whichever of the two links the reader uses, and that a report built in the browser from a paste is stored nowhere.
 
 The report page shows "expires in N days" as a neutral `NoticeBar` when it loaded from `/r/`, and shows nothing when it loaded from a fragment.
 
