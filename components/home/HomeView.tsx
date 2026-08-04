@@ -10,8 +10,8 @@ import { encodeReport } from "@/lib/core/codec";
 import { classifyPaste, type PastedRow, type PasteError } from "@/lib/core/parse";
 import { SETTINGS } from "@/lib/core/settings";
 import { TERMS } from "@/lib/terms";
-import { snapshotSql } from "@/packages/robovac-mcp/src/queries";
-import { buildSnapshot } from "@/packages/robovac-mcp/src/report";
+import { snapshotSql } from "@/lib/core/queries";
+import { buildSnapshot } from "@/lib/core/report";
 
 // The generated SQL aligns its AS clauses with wide whitespace; collapse it so
 // the narrow homepage column shows one select item per line.

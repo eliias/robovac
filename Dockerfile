@@ -1,8 +1,7 @@
 FROM node:24-alpine AS deps
 RUN corepack enable
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/robovac-mcp/package.json packages/robovac-mcp/
+COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # CI runs lint, format check, and tests against this stage.

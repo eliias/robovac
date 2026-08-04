@@ -29,10 +29,7 @@ const CONFIG = `# Claude Code
 claude mcp add --transport http robovac https://robovac.hannesmoser.at/api/mcp
 
 # Codex
-codex mcp add robovac --url https://robovac.hannesmoser.at/api/mcp
-
-# prefer a local process? same tools over stdio:
-npx -y robovac-mcp`;
+codex mcp add robovac --url https://robovac.hannesmoser.at/api/mcp`;
 
 const cards: { title: string; sig: string; body: React.ReactNode }[] = [
   {
@@ -110,9 +107,7 @@ export default function McpPage() {
           >
             ADD TO YOUR AGENT
           </span>
-          <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>
-            streamable http · stdio
-          </span>
+          <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>streamable http</span>
         </div>
         <pre
           style={{

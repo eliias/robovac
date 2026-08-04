@@ -1,14 +1,14 @@
-import { fmtCompact, fmtDur, fmtSecs } from "../../../lib/core/format";
-import { threshold, triggerRows } from "../../../lib/core/model";
-import { optimize } from "../../../lib/core/optimize";
-import { SETTINGS, defaultValues, type Values } from "../../../lib/core/settings";
+import { fmtCompact, fmtDur, fmtSecs } from "@/lib/core/format";
+import { threshold, triggerRows } from "@/lib/core/model";
+import { optimize } from "@/lib/core/optimize";
+import { SETTINGS, defaultValues, type Values } from "@/lib/core/settings";
 import {
   MIN_SAMPLE_SECONDS,
   SnapshotSchema,
   hasMeasuredRate,
   type Hints,
   type Snapshot,
-} from "../../../lib/core/snapshot";
+} from "@/lib/core/snapshot";
 
 export type Row = Record<string, unknown>;
 

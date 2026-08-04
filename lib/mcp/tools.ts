@@ -1,12 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { encodeReport } from "../../../lib/core/codec";
-import { optimize } from "../../../lib/core/optimize";
-import { SETTINGS } from "../../../lib/core/settings";
-import type { Hints } from "../../../lib/core/snapshot";
-import { findTerm, TERMS, termHref } from "../../../lib/terms";
-import { candidatesSql, snapshotSql } from "./queries";
-import { buildSnapshot, verdict } from "./report";
+import { encodeReport } from "@/lib/core/codec";
+import { optimize } from "@/lib/core/optimize";
+import { SETTINGS } from "@/lib/core/settings";
+import type { Hints } from "@/lib/core/snapshot";
+import { findTerm, TERMS, termHref } from "@/lib/terms";
+import { candidatesSql, snapshotSql } from "@/lib/core/queries";
+import { buildSnapshot, verdict } from "@/lib/core/report";
 
 // robovac never connects to a database and reads no environment variables.
 // The agent runs the SQL on its own connection and passes the rows back.

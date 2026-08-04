@@ -13,5 +13,5 @@
     "node": true,
     "es2022": true
   },
-  "ignorePatterns": ["node_modules", ".next", "out", "packages/robovac-mcp/dist"]
+  "ignorePatterns": ["node_modules", ".next", "out"]
 }

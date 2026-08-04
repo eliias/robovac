@@ -16,7 +16,7 @@ import { useClipboard, selectContents } from "@/components/useClipboard";
 import { ErrorState } from "./ErrorState";
 import { FigDeadTuples, FigFreezeHorizon, FigIoCost } from "./Figures";
 import { buildSql, OutputPanel } from "./OutputPanel";
-import { bindingTrigger, insertPeriodDays } from "@/packages/robovac-mcp/src/report";
+import { bindingTrigger, insertPeriodDays } from "@/lib/core/report";
 import { Slider } from "./Slider";
 
 const GROUPS: { id: Group; title: string; jobLine: string }[] = [
