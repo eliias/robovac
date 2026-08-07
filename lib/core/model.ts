@@ -51,6 +51,23 @@ export function passPages(
   return heap + INDEX_HEAP_FRACTION * (indexes ?? 0) * pages;
 }
 
+/**
+ * What one pass costs when nothing throttles it, as a stated assumption like
+ * INDEX_HEAP_FRACTION above. AlloyDB SSD passes measured 156-752 MB/s across
+ * heap-bound and index-bound runs, so 200 MB/s is the conservative middle.
+ *
+ * A daily work budget needs a rate that does not move. runCost divides by
+ * autovacuum_vacuum_cost_limit, and that limit is one of the knobs under
+ * proposal, so a budget priced through runCost lets a bigger cost budget appear
+ * to buy extra runs. It cannot: the limit lifts a throttle, it does not create
+ * I/O capacity, and every run re-reads the same pages either way.
+ */
+const SUSTAINED_MB_PER_SECOND = 200;
+
+export function unthrottledPassSeconds(pages: number): number {
+  return (pages * 8192) / (SUSTAINED_MB_PER_SECOND * 1048576);
+}
+
 export function runCost(values: Values, pages: number): RunCost {
   const costUnits =
     pages *

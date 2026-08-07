@@ -5,6 +5,7 @@ import {
   shutdownMarginDays,
   threshold,
   triggerRows,
+  unthrottledPassSeconds,
 } from "./model";
 import { SETTINGS, type Values } from "./settings";
 import type { PatternName, Snapshot } from "./snapshot";
@@ -471,20 +472,31 @@ function prove(
     }
   }
 
-  // Gate 4: worker starvation. Total vacuum seconds per day stays bounded.
+  // Gate 4: worker starvation. Total vacuum work per day stays bounded.
+  //
+  // The budget prices a pass at unthrottled speed, not through runCost. runCost
+  // divides by autovacuum_vacuum_cost_limit, and the proposal raises that limit,
+  // so pricing the budget through it lets a bigger cost budget pay for extra
+  // runs. It cannot: every run re-reads the same pages whatever the limit says.
+  //
+  // The pathology this catches: 47M rows under 74 indexes, 3.6 runs a day, where
+  // workPages is almost all index term. Priced in throttled seconds, cutting the
+  // threshold to an hour of churn looked free, because cost_limit 200 -> 2000
+  // cancelled the extra 30 runs on paper. Priced honestly it is 9x the index
+  // reads, and every one of those runs walks all 74 indexes (indexBypassNote).
   if (rates.deadPerDay > 0) {
-    const perDay = (thr: number, cost: { seconds: number }) =>
-      (rates.deadPerDay / Math.max(1, thr)) * cost.seconds;
-    const curLoad = perDay(thrCur, costCur);
+    const runSeconds = unthrottledPassSeconds(workPages);
+    const perDay = (thr: number) => (rates.deadPerDay / Math.max(1, thr)) * runSeconds;
+    const curLoad = perDay(thrCur);
     const cap = Math.max(4 * curLoad, 6 * 3600);
-    let newLoad = perDay(threshold(values, rows), runCost(values, workPages));
+    let newLoad = perDay(threshold(values, rows));
     let guard = 0;
     while (newLoad > cap && guard < 12) {
       values.autovacuum_vacuum_threshold = clampToDef(
         "autovacuum_vacuum_threshold",
         values.autovacuum_vacuum_threshold * 2,
       );
-      newLoad = perDay(threshold(values, rows), runCost(values, workPages));
+      newLoad = perDay(threshold(values, rows));
       guard++;
     }
     if (guard > 0) {
@@ -493,7 +505,7 @@ function prove(
     }
     if (newLoad > cap) {
       warnings.push(
-        "The dead-row rate outruns the worker budget at any threshold: vacuum cannot keep up on this table. Raise autovacuum_max_workers or relax the replication-lag budget.",
+        "The dead-row rate outruns the worker budget at any threshold: vacuum cannot keep up on this table. Raise autovacuum_max_workers, or cut the pages each run has to read (fewer or smaller indexes).",
       );
     }
   }

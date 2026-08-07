@@ -658,3 +658,49 @@ describe("companions", () => {
     expect(r.companions.clusterAdvice.join(" ")).toMatch(/workers/);
   });
 });
+
+describe("the daily work budget", () => {
+  /**
+   * Temporal's visibility table, us-east1, 2026-08-07: 47M rows on a 52 GB heap
+   * under 74 indexes holding about 840 GB. The index pass is 91-96% of every run
+   * and no reachable threshold gets under the 2% bypass line, so the threshold
+   * decides how many times a day those 840 GB get read.
+   */
+  const wide = (): SnapshotStats =>
+    stats({
+      live: 47_662_574,
+      relTuples: 47_179_380,
+      dead: 2_302_007,
+      pages: 6_799_815,
+      allVisiblePages: 6_527_636,
+      indexes: 74,
+      deadPerDay: 33_800_000,
+      insPerDay: 10_200_000,
+      xidAge: 39_000_000,
+      xidPerDay: 342_980_000,
+      hints: { pattern: "large-update-heavy", replicationLagBudget: "none" },
+    });
+
+  it("counts pages, so a bigger cost budget cannot pay for more runs", () => {
+    // The budget used to be denominated in throttled seconds. Because the
+    // proposal also raises autovacuum_vacuum_cost_limit, ten times the runs
+    // priced out as free and the threshold landed on one hour of churn. The
+    // limit lifts a throttle; it does not create I/O capacity.
+    const r = optimize(wide());
+    expect(r.values.autovacuum_vacuum_threshold).toBeGreaterThan(1_000_000);
+  });
+
+  it("holds the proposal inside four times the current run rate", () => {
+    const snap = wide();
+    const r = optimize(snap);
+    const runsPerDay = (values: typeof r.values) =>
+      snap.deadPerDay! / threshold(values, snap.relTuples!);
+    expect(runsPerDay(r.values)).toBeLessThanOrEqual(4 * runsPerDay(snap.current) + 1e-9);
+  });
+
+  it("still tells the reader that every run walks all the indexes", () => {
+    const r = optimize(wide());
+    expect(r.companions.indexBypassNote).toMatch(/past the 2% line/);
+    expect(r.companions.indexBypassNote).toMatch(/all 74 indexes/);
+  });
+});
