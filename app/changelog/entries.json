@@ -1,5 +1,13 @@
 [
   {
+    "hash": "47a728f",
+    "date": "2026-08-07",
+    "type": "fix",
+    "scope": "core",
+    "breaking": false,
+    "description": "price the daily work budget without the throttle"
+  },
+  {
     "hash": "0259d6a",
     "date": "2026-08-04",
     "type": "refactor",
